@@ -32,6 +32,14 @@ def test_single_carrier_without_context_is_replaced():
     assert "doc" in eng.persons["emp:1"].records
 
 
+def test_a_given_name_that_opens_an_unknown_full_name_is_not_given_to_the_carrier():
+    eng = _engine()
+    for rid, text in (("m0", "Sebastián Ozámiz llamó ayer."), ("m1", "Ayer hablé con Sebastián Ozámiz del caso.")):
+        out = _run(eng, text, rid)
+        assert "Sebastián" not in out and "Ozámiz" not in out  # the whole unknown name is replaced
+        assert rid not in eng.persons["emp:1"].records
+
+
 def test_several_carriers_are_left_as_before_and_add_no_entity():
     eng = _engine()
     before = set(eng.persons)

@@ -812,6 +812,14 @@ class Engine:
                 surf = text[start:end]
                 weak = ns == 0
                 if weak:
+                    # A given name that opens an unknown full name ("<given> <unknown surname>") is
+                    # that unknown person: giving the given name to a known carrier would leave the
+                    # surname in the clear.
+                    span = self._unknown_name(text, toks, i, ctx)
+                    if span:
+                        spans.append(span[:6])
+                        i += span[6]
+                        continue
                     pid = self._weak_pick(pids, ctx, text, start, surf)
                 else:
                     pid = self.pick(pids, ctx, text)
@@ -830,6 +838,16 @@ class Engine:
                 spans.append(span[:6])
                 i += span[6]
                 continue
+            if best and weak and pid is None:  # nothing decided and no unknown full name opens here
+                pid = self._lone_carrier(pids, ctx, text, surf)
+                if pid and not self._is_kept_at(text, start, end, self._anchored(pid, ctx)):
+                    p = self.persons[pid]
+                    repl = self.render_name(p, ng, ns, surf, text, start, end)
+                    spans.append((start, end, repl, "name", p.pid, surf))
+                    self.note(p, ctx.record_id, "", "name", repl)
+                    p.originals.add(surf)
+                    i += n
+                    continue
             i += 1
         return spans
 
@@ -883,13 +901,19 @@ class Engine:
             return next(iter(named))
         if len(hit) == 1:
             return next(iter(hit))
-        # Nothing in the record decides: when exactly one person carries the given name, it is
-        # theirs (leaving it is a sure leak). A given name that is also a common word ("Abril",
-        # "Julio") still needs a cue before it. Several carriers: left as before, no guess.
-        if len(pids) == 1 and (NAME_CUE.search(text[max(0, start - 40):start])
-                               or norm(surf) not in fakes.NON_NAME_WORDS):
+        if NAME_CUE.search(text[max(0, start - 40):start]) and len(pids) == 1:
             return next(iter(pids))
         return None
+
+    def _lone_carrier(self, pids, ctx, text, surf) -> str | None:
+        """A bare given name that nothing decided and that does not open an unknown full name:
+        when exactly one person carries it, it is theirs (leaving it is a sure leak). A given
+        name that is also a common word ("Abril", "Julio") still needs a cue. Several carriers:
+        left as before, no guess and no new entity."""
+        pids = {self.resolve_pid(p) for p in pids}
+        if len(pids) != 1 or (not surf[:1].isupper() and not ctx.filename) or norm(surf) in fakes.NON_NAME_WORDS:
+            return None
+        return next(iter(pids))
 
     def _is_kept_at(self, text, start, end, anchored: bool = False) -> bool:
         window = norm(text[max(0, start - 25):min(len(text), end + 25)])
