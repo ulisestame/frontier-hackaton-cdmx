@@ -199,6 +199,8 @@ class Engine:
         self.authors: dict[str, str] = {}
         # Pseudonym values the last run had already issued (set when loading its state).
         self.published: set[str] = set()
+        # (ISO date, amount) of each transaction -> its customers: a tie-breaker for homonyms
+        self.tx_index: dict[tuple[str, str], set[str]] = {}
 
     # ------------------------------------------------------------ registry --
     def resolve_pid(self, pid: str | None) -> str | None:
@@ -333,11 +335,38 @@ class Engine:
             if len(hit) == 1:
                 return next(iter(hit))
         if text:
-            ev = self.evidence(text) & pids
+            ev = (self.evidence(text) | self.tx_evidence(text)) & pids
             if len(ev) == 1:
                 return next(iter(ev))
         self.warnings.append(f"ambiguous {sorted(pids)} in {ctx.record_id}")
         return sorted(pids)[0]
+
+    _MONTHS = {m: i + 1 for i, m in enumerate(("enero", "febrero", "marzo", "abril", "mayo", "junio", "julio",
+                                                "agosto", "septiembre", "octubre", "noviembre", "diciembre"))}
+    _AMOUNT_RX = re.compile(r"(?<![\d.,])\$?\s?(\d{1,3}(?:\.\d{3})+|\d{4,9})(?![\d.,])")
+    _DATE_RX = re.compile(r"(?i)(?<!\d)(?:(\d{4})-(\d{2})-(\d{2})|(\d{1,2}) de (" +
+                          "|".join(("enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto",
+                                    "septiembre", "octubre", "noviembre", "diciembre")) +
+                          r")(?: de (\d{4}))?|(\d{1,2})/(\d{1,2})(?:/(\d{4}))?)(?!\d)")
+
+    def tx_evidence(self, text: str, year: str = "2026") -> set[str]:
+        """Customers with a transaction whose date and amount the text mentions together."""
+        if not self.tx_index or not text:
+            return set()
+        amounts = {m.group(1).replace(".", "") for m in self._AMOUNT_RX.finditer(text)}
+        dates = set()
+        for m in self._DATE_RX.finditer(text):
+            if m.group(1):
+                dates.add(f"{m.group(1)}-{m.group(2)}-{m.group(3)}")
+            elif m.group(4):
+                dates.add(f"{m.group(6) or year}-{self._MONTHS[m.group(5).lower()]:02d}-{int(m.group(4)):02d}")
+            else:
+                dates.add(f"{m.group(9) or year}-{int(m.group(8)):02d}-{int(m.group(7)):02d}")
+        out: set[str] = set()
+        for d in dates:
+            for a in amounts:
+                out |= self.tx_index.get((d, a), set())
+        return {self.resolve_pid(p) for p in out}
 
     def evidence(self, text: str) -> set[str]:
         """Persons pointed to by hard identifiers in a piece of text."""

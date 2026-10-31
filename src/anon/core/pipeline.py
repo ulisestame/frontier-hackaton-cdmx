@@ -166,6 +166,9 @@ def build_registry(eng: Engine, corpus) -> dict:
                 eng.index_id(pid, "cedula", c["cedula"])
         elif r["table"] == "transacciones" and owner:
             eng.index_id(next(iter(owner)), "key", c.get("tx_id", ""))
+            if c.get("fecha") and c.get("monto"):
+                amount = re.sub(r"\D", "", str(c["monto"]).split(".")[0].split(",")[0])
+                eng.tx_index.setdefault((c["fecha"][:10], amount), set()).update(owner)
 
     # chat users -> registry persons
     ambiguous: dict[str, set[str]] = {}
@@ -201,10 +204,13 @@ def build_registry(eng: Engine, corpus) -> dict:
         if m.get("_user") and not m.get("_is_bot"):
             t["users"].append(m["_user"])
         t["text"].append(m.get("text", ""))
+        t["text"].extend(a.get("filename", "") for a in m.get("attachments", []))  # ids inside file names count
     for upid, cands in ambiguous.items():
         uid = upid[2:]
         text = "\n".join(x for t in threads.values() if uid in t["users"] for x in t["text"])
         ev = eng.evidence(text) & cands
+        if not ev:  # a date and an amount that match one homonym's transaction
+            ev = eng.tx_evidence(text) & cands
         if len(ev) == 1:
             eng.merge(upid, next(iter(ev)))
     # Users with no name match (deactivated accounts, nicknames): link them only through hard

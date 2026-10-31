@@ -53,3 +53,14 @@ def test_english_phrasing(eng):
 def test_a_place_alone_stays(eng):
     for text in (f"La reunión de equipo fue en {BARRIO}.", f"Abrimos oficina en {BARRIO} en 2026."):
         assert eng.generalize_quasi(text) == text
+
+
+def test_a_date_and_an_amount_decide_between_homonyms():
+    eng = Engine(fakes.PseudonymFactory(b"homonym-test"))
+    for pid in ("cl:A", "cl:B"):
+        eng.add_person(pid, "customer", "Rosalinda Quiñones Tafur", city="Cali")
+    eng.tx_index[("2026-09-03", "123456")] = {"cl:B"}
+    from anon.core.engine import Ctx
+    text = "El 3 de septiembre me cobraron 123.456 que no reconozco."
+    assert eng.pick({"cl:A", "cl:B"}, Ctx(record_id="r"), text) == "cl:B"
+    assert eng.tx_evidence("me cobraron 123.456") == set()  # an amount without its date decides nothing
