@@ -159,3 +159,29 @@ def test_a_brand_person_saved_by_an_earlier_version_is_dropped_on_load(tmp_path)
     again.f = fakes.PseudonymFactory(SECRET, _blocked(again))
     for text in ("Compra Juan Valdez Quintero", "Compra Juan Valdez"):
         assert again.anonymize_text(text, Ctx(record_id="tx:2")) == text
+
+
+# ------------------------------------------------------------ pseudonym uniqueness ---
+
+def _births(f: fakes.PseudonymFactory, keys) -> dict[str, str]:
+    return {k: f.birth(k, "1990-06-15") for k in keys}
+
+
+def test_birth_pseudonyms_are_unique_across_people():
+    f = fakes.PseudonymFactory(SECRET)
+    got = _births(f, [f"cl:{i}:19900615" for i in range(400)])  # one real date, 400 people
+    assert len(set(got.values())) == len(got)
+    assert "1990-06-15" not in got.values()
+
+
+def test_a_new_person_never_gets_a_birth_pseudonym_from_the_saved_state():
+    old = fakes.PseudonymFactory(SECRET)
+    before = _births(old, [f"cl:{i}:19900615" for i in range(300)])
+    state = old.export_state()
+    legacy = {**state, "taken": {k: v for k, v in state["taken"].items() if k != "birth"}}  # older states
+    for saved in (state, legacy):
+        new = fakes.PseudonymFactory(SECRET, state=saved)
+        assert _births(new, before) == before  # published values unchanged
+        after = _births(new, [f"cl:n{i}:19900615" for i in range(300)])
+        assert not set(after.values()) & set(before.values())
+        assert len(set(after.values())) == len(after)
