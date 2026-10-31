@@ -75,7 +75,8 @@ def save_state(state_dir: Path, engine: Engine, entity_ids: dict) -> None:
         "persons": {
             pid: {
                 "kind": p.kind, "given": p.given, "surnames": p.surnames, "gender": p.gender,
-                "city": p.city, "ids": {k: sorted(v) for k, v in p.ids.items()},
+                "city": p.city, "occupation": p.occupation, "barrio": p.barrio,
+                "ids": {k: sorted(v) for k, v in p.ids.items()},
             }
             for pid, p in engine.persons.items()
         },
@@ -92,7 +93,8 @@ def engine_from_state(state: dict) -> Engine:
     eng.memo = dict(state.get("memo", {}))
     for pid, d in state.get("persons", {}).items():
         p = Person(pid=pid, kind=d["kind"], given=d["given"], surnames=d["surnames"],
-                   gender=d.get("gender"), city=d.get("city", ""))
+                   gender=d.get("gender"), city=d.get("city", ""),
+                   occupation=d.get("occupation", ""), barrio=d.get("barrio", ""))
         eng.persons[pid] = p
         eng.index_names(p)
         for kind, vals in d.get("ids", {}).items():
@@ -125,6 +127,9 @@ def register_table_row(eng: Engine, r: dict) -> str | None:
         if c.get("ciudad") and c.get("barrio"):
             # barrios of rows added after the corpus grows become detectable in free text
             fakes.register_barrio(c["ciudad"], c["barrio"])
+        person = eng.persons[pid]
+        person.occupation = person.occupation or c.get("ocupacion", "")
+        person.barrio = person.barrio or c.get("barrio", "")
         for kind, col in (("cedula", "num_doc"), ("email", "correo"), ("phone", "celular"),
                           ("address", "direccion"), ("birth", "fecha_nacimiento")):
             eng.index_id(pid, kind, c.get(col, ""))

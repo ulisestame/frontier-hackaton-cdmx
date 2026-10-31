@@ -56,6 +56,8 @@ OCC_CUE = re.compile(
     r"mi\s+profesión\s+es|i\s+am\s+an?|i'm\s+an?|work\s+as\s+an?)\s+(?:un|una|el|la)?\s*$"
 )
 YEAR_RX = re.compile(r"(?<!\d)(19[5-9]\d|20[0-2]\d)(?!\d)")
+# a joining year: "en 2023", "desde 2021", "año 2022", "since 2023", "in 2023"
+YEAR_CTX_RX = re.compile(r"(?i)\b(en|desde|año|since|in)\s+(?:el\s+)?((?:19[5-9]|20[0-2])\d)(?!\d)")
 
 TOKEN_RX = re.compile(r"[^\W\d_]+(?:['’][^\W\d_]+)?")
 EMAIL_RX = re.compile(r"(?<![\w.+-])[A-Za-z0-9][A-Za-z0-9._%+-]*@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,}(?![\w-])")
@@ -127,6 +129,8 @@ class Person:
     surnames: list[str]
     gender: str | None = None
     city: str = ""
+    occupation: str = ""  # master-row values, to tell when a text points back at this person
+    barrio: str = ""
     ids: dict[str, set[str]] = field(default_factory=dict)
     originals: set[str] = field(default_factory=set)
     records: set[str] = field(default_factory=set)
@@ -669,7 +673,7 @@ class Engine:
         result = "".join(out)
         self.collect_kept(text, ctx.record_id)
         owner = self.persons.get(self.resolve_pid(ctx.owner)) if ctx.owner else None
-        return self.generalize_quasi(result, owner.city if owner else "")
+        return self.generalize_quasi(result, owner.city if owner else "", owner)
 
     def collect_kept(self, text: str, rec_id: str) -> None:
         nt = norm(text)
@@ -678,33 +682,63 @@ class Engine:
             if len(k) >= 4 and re.search(rf"(?<![a-z0-9]){re.escape(k)}(?![a-z0-9])", nt):
                 self.kept_seen.setdefault(term, set()).add(rec_id)
 
-    def generalize_quasi(self, text: str, city: str = "") -> str:
-        """Occupation + barrio + year in a self-description: generalize all three.
+    _barrio_cache: tuple = ((), None)
+
+    def _barrio_rx(self):
+        keys = tuple(sorted((b for b in fakes.CITY_OF_BARRIO if len(b) >= 4), key=len, reverse=True))
+        if self._barrio_cache[0] != keys:
+            alt = "|".join(r"\s+".join(re.escape(w) for w in b.split()) for b in keys)
+            self._barrio_cache = (keys, re.compile(rf"(?<![\w])(?:{alt})(?![\w])", re.I) if keys else None)
+        return self._barrio_cache[1]
+
+    def generalize_quasi(self, text: str, city: str = "", person: "Person | None" = None) -> str:
+        """Generalize occupation, barrio and joining year together when they could single
+        someone out, whatever the phrasing (first or third person, Spanish or English): an
+        occupation stated after a cue ("soy ..."), one that matches the linked customer's own
+        master row, or at least two of the three in the same text. Without a linked customer
+        (most documents) it takes an occupation and a barrio together. A place alone stays.
 
         city is the record owner's city, used for barrios that exist in several cities
         (Castilla: Medellín and Bogotá; Boston: Medellín and Barranquilla)."""
-        # One precompiled alternation (longest term first) instead of one regex per term:
-        # the per-term loop recompiled ~1,000 patterns per text (the re cache holds 512).
-        # Spans are found on the original text and replaced right-to-left, so a sector
-        # phrase already written ("estudiante de educación superior") is never re-matched.
-        spans = [m for m in fakes.OCCUPATION_RX.finditer(text)
-                 if OCC_CUE.search(text[max(0, m.start() - 40):m.start()])]
-        if not spans:
+        if not text:
             return text
-        out = text
-        for m in reversed(spans):
-            out = out[:m.start()] + fakes.occupation_sector(m.group()) + out[m.end():]
+        mine_occ = norm(person.occupation) if person and person.occupation else ""
+        mine_barrio = " ".join(norm(person.barrio).split()) if person and person.barrio else ""
+        occs, cued = [], False
+        for m in fakes.OCCUPATION_RX.finditer(text):
+            term = norm(m.group())
+            cue = bool(OCC_CUE.search(text[max(0, m.start() - 40):m.start()]))
+            if cue or term == mine_occ or term not in fakes.AMBIGUOUS_OCCUPATION_TERMS:
+                occs.append(m)
+                cued = cued or cue
+        rx = self._barrio_rx()
+        plain = strip_accents(text)
+        barrios = [m for m in rx.finditer(plain) if text[m.start():m.start() + 1].isupper()] if rx else []
+        years = list(YEAR_CTX_RX.finditer(text))
+        mine = any(norm(m.group()) == mine_occ for m in occs) or \
+            any(" ".join(norm(m.group()).split()) == mine_barrio for m in barrios)
+        together = (bool(occs) + bool(barrios) + bool(years)) >= 2 if person else (bool(occs) and bool(barrios))
+        if not (cued or mine or together):
+            return text
         home = fakes.canonical_city(city) if city else ""
-        for barrio_norm, barrio_city in list(fakes.CITY_OF_BARRIO.items()):
-            if len(barrio_norm) < 4:
-                continue
-            for m in re.finditer(r"[^\W\d_]+(?:\s+[^\W\d_]+){0,3}", out):
-                pass
-            rx = re.compile(r"(?<![\w])" + r"\s+".join(re.escape(w) for w in barrio_norm.split()) + r"(?![\w])", re.I)
-            plain = strip_accents(out)
-            m = rx.search(plain)
-            if m and out[m.start():m.end()][:1].isupper():
-                cities = fakes.CITIES_OF_BARRIO.get(barrio_norm, [barrio_city])
-                out = out[:m.start()] + (home if home in cities else barrio_city) + out[m.end():]
-        out = YEAR_RX.sub("hace unos años", out, count=1) if re.search(r"(?i)\b(?:en|desde|año)\s+(?:19|20)\d{2}\b", out) else out
+        edits = [(m.start(), m.end(), fakes.occupation_sector(m.group())) for m in occs]
+        for m in barrios:
+            key = " ".join(norm(m.group()).split())
+            cities = fakes.CITIES_OF_BARRIO.get(key) or [fakes.CITY_OF_BARRIO.get(key, "")]
+            target = home if home in cities else cities[0]
+            if target:
+                edits.append((m.start(), m.end(), target))
+        if years:
+            y = years[0]
+            if y.group(1).lower() == "since":
+                edits.append((y.start(), y.end(), "for a few years"))
+            elif y.group(1).lower() == "in":
+                edits.append((y.start(), y.end(), "a few years ago"))
+            else:  # "entré en 2025" -> "entré en hace unos años", as in the reference output
+                edits.append((y.start(2), y.end(2), "hace unos años"))
+        out, last = text, len(text) + 1
+        for s0, e0, repl in sorted(edits, key=lambda x: x[0], reverse=True):
+            if e0 <= last:  # skip overlapping spans
+                out = out[:s0] + repl + out[e0:]
+                last = s0
         return out
