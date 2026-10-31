@@ -89,3 +89,48 @@ def test_reporta_a_without_a_known_boss_is_still_anonymized():
     row = _employee("KP-903", "Celina Aranda Mora", "Hernando Aguilar", "otra@example.co", "3001110004", "71000004")
     out = process_table_row(eng, row)["columns"]["reporta_a"]
     assert "Hernando" not in out and "Aguilar" not in out
+
+
+# ------------------------------------------------- ties between people of different kinds ---
+
+def _rendered(eng: Engine, pid: str) -> str:
+    return eng.pname(eng.persons[pid])["short"]
+
+
+def test_a_role_on_the_line_sends_the_short_name_to_the_employee():
+    eng, _ = _company()
+    text = "| Cargo | Nombre | Reporta a |\n| Coordinador de Fraude | Ramiro Quintana | Celina Aranda |"
+    out = eng.anonymize_text(text, Ctx(record_id="doc_x", record_text=text))
+    assert _rendered(eng, "kp:KP-901") in out and _rendered(eng, "cl:CL-90901") not in out
+
+
+def test_a_customer_key_on_the_line_sends_the_short_name_to_the_customer():
+    eng, _ = _company()
+    text = "Asistentes: Celina Aranda (analista de operaciones).\nCaso CL-90999: Ramiro Quintana pide revisar un cobro."
+    out = eng.anonymize_text(text, Ctx(record_id="doc_y", record_text=text))
+    assert _rendered(eng, "cl:CL-90901") in out and _rendered(eng, "kp:KP-901") not in out
+
+
+def test_without_a_cue_the_customer_wins_never_the_alphabetical_order():
+    eng = Engine(fakes.PseudonymFactory(SECRET))
+    eng.add_person("u:UQ1", "user", "Ramiro Quintana")  # a chat customer; "kp:" sorts before "u:"
+    eng.add_person("kp:KP-901", "employee", "Ramiro Quintana Velasco")
+    eng.f = fakes.PseudonymFactory(SECRET, _blocked(eng))
+    text = "Ramiro Quintana publicó la nota de la semana."
+    out = eng.anonymize_text(text, Ctx(record_id="chat:9", record_text=text))
+    assert _rendered(eng, "u:UQ1") in out
+    assert eng.warnings  # still reported as a guess
+
+
+def test_a_candidates_own_handle_in_the_text_decides():
+    eng, _ = _company()
+    eng.index_id("cl:CL-90901", "handle", "rquintana")
+    text = "Gerente de producto: Celina Aranda.\nTrabajaremos con Ramiro Quintana, que publica como @rquintana."
+    out = eng.anonymize_text(text, Ctx(record_id="doc_z", record_text=text))
+    assert _rendered(eng, "cl:CL-90901") in out and _rendered(eng, "kp:KP-901") not in out
+
+
+def test_an_employee_row_prefers_colleagues():
+    eng, _ = _company()
+    out = eng.anonymize_text("Ramiro Quintana", Ctx(record_id="empleados:KP-903", record_text="Ramiro Quintana"))
+    assert out == _rendered(eng, "kp:KP-901")

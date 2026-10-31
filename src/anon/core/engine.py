@@ -80,10 +80,23 @@ ISO_DATE_RX = re.compile(r"(?<!\d)((?:19|20)\d{2})-(\d{2})-(\d{2})(?!\d)")
 SLASH_DATE_RX = re.compile(r"(?<!\d)(\d{2})/(\d{2})/((?:19|20)\d{2})(?!\d)")
 MENTION_RX = re.compile(r"<@([A-Z0-9]+)(?:\|[^>]*)?>")
 TABLE_KEY_RX = re.compile(r"\b(CL-\d{4,6}|PG-\d{4,6}|TX-\d{4,7}|PQR-\d{4}-\d{3,5}|KP-\d{3})\b")
+# Ties between people of different kinds (a customer and an employee who share a short name):
+# a role next to the mention, or the corporate mailbox, points to the colleague; a customer
+# record key points to the customer. ("cargo" is not a cue: in support text it means a charge.)
+ROLE_CUE = re.compile(
+    r"(?i)(?<![\w])(?:gerente|coordinador[a]?|analista de|l[ií]der de|agente de soporte|director[a]?|"
+    r"jef[ea] de|vicepresident[ea]|ingenier[oa] de|ceo|cto|cfo|coo|reporta a)(?![\w])")
+CUSTOMER_KEY_RX = re.compile(r"\b(?:CL-\d{4,6}|PG-\d{4,6}|TX-\d{4,7}|PQR-\d{4}-\d{3,5})\b")
+KIND_GROUP = {"customer": "customer", "user": "customer", "employee": "employee"}
 
 
 def ntoks(text: str) -> tuple[str, ...]:
     return tuple(norm(m.group()) for m in TOKEN_RX.finditer(text))
+
+
+def _has_run(toks: tuple[str, ...], run: tuple[str, ...]) -> bool:
+    n = len(run)
+    return n > 0 and any(toks[i:i + n] == run for i in range(len(toks) - n + 1))
 
 
 def is_given(token: str) -> bool:
@@ -335,11 +348,80 @@ class Engine:
             if len(hit) == 1:
                 return next(iter(hit))
         if text:
-            ev = (self.evidence(text) | self.tx_evidence(text)) & pids
+            ev = (self.evidence(text) | self.tx_evidence(text) | self._own_handles(pids, text)) & pids
             if len(ev) == 1:
                 return next(iter(ev))
+        # Candidates of different kinds: the kind the mention's context points to decides; with
+        # no cue, customers first. The alphabetical fallback only ever chooses within one kind.
+        groups: dict[str, set[str]] = {}
+        for p in pids:
+            groups.setdefault(KIND_GROUP.get(self.persons[p].kind, "external") if p in self.persons else "external",
+                              set()).add(p)
+        pool = pids
+        if len(groups) > 1:
+            kind = self._kind_prior(pids, ctx, text)
+            if kind and len(groups.get(kind, ())) == 1:
+                return next(iter(groups[kind]))
+            pool = groups.get(kind or "") or groups.get("customer") or groups.get("employee") or pids
         self.warnings.append(f"ambiguous {sorted(pids)} in {ctx.record_id}")
-        return sorted(pids)[0]
+        return sorted(pool)[0]
+
+    def _own_handles(self, pids: set[str], text: str) -> set[str]:
+        """Candidates whose own handle (chat user name, mailbox name) is written in the text."""
+        out = set()
+        for pid in pids:
+            p = self.persons.get(pid)
+            if p is None:
+                continue
+            given = {norm(g) for g in p.given}
+            for h in p.ids.get("handle", ()):
+                if len(h) >= 5 and h not in given and re.search(
+                        rf"(?<![\w.-]){re.escape(h)}(?![\w@-]|\.\w)", text):
+                    out.add(pid)
+        return out
+
+    def _kind_cues(self, chunk: str) -> set[str]:
+        out = set()
+        if ROLE_CUE.search(chunk) or "@kipupay.co" in chunk.lower():
+            out.add("employee")
+        if CUSTOMER_KEY_RX.search(chunk):
+            out.add("customer")
+        for q in self.evidence(chunk):
+            kind = KIND_GROUP.get(self.persons[q].kind) if q in self.persons else None
+            if kind:
+                out.add(kind)
+        return out
+
+    def _kind_prior(self, pids: set[str], ctx: Ctx, text: str) -> str | None:
+        """"employee" or "customer": which kind an ambiguous mention most likely refers to.
+
+        An empleados row (or a record owned by an employee) is about colleagues. Otherwise the
+        lines where the shared name occurs decide (a role or the corporate mailbox on that line,
+        or a customer key or identifier), then the record as a whole; None when they disagree."""
+        if ctx.record_id.startswith("empleados:"):
+            return "employee"
+        owner = self.persons.get(self.resolve_pid(ctx.owner)) if ctx.owner else None
+        if owner is not None and owner.kind == "employee":
+            return "employee"
+        shared: set[tuple[str, ...]] | None = None
+        for pid in pids:
+            p = self.persons[pid]
+            forms = {ntoks(" ".join(p.given[:a] + p.surnames[:b]))
+                     for a in {1, len(p.given)} for b in {1, len(p.surnames)} if a and b and p.given and p.surnames}
+            shared = forms if shared is None else shared & forms
+        votes: set[str] = set()
+        for line in text.splitlines():
+            toks = ntoks(line)
+            if any(_has_run(toks, f) for f in shared or ()):
+                cues = self._kind_cues(line)
+                if len(cues) == 1:
+                    votes |= cues
+        if len(votes) == 1:
+            return votes.pop()
+        if votes:
+            return None
+        cues = self._kind_cues(ctx.record_text or text)
+        return cues.pop() if len(cues) == 1 else None
 
     _MONTHS = {m: i + 1 for i, m in enumerate(("enero", "febrero", "marzo", "abril", "mayo", "junio", "julio",
                                                 "agosto", "septiembre", "octubre", "noviembre", "diciembre"))}
