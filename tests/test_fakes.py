@@ -430,6 +430,19 @@ def test_reserved_real_values_are_never_generated(blocked):
     f3 = PseudonymFactory(SECRET, blocked)
     f3.birth("x", "1990-01-01")
     assert "1990-01-01" in f3.reserved["birth"]
+    # digit kinds are checked against each other's real values (the judge ignores the kind)
+    acct = f1.account("dk", "63209854")
+    f4 = PseudonymFactory(SECRET, blocked, reserved={"cedula": [acct]})
+    assert f4.account("dk", "63209854") != acct
+
+
+def test_upfront_reserve_prevents_birth_collisions_between_people(blocked):
+    rng = random.Random(11)
+    real = [(f"CL-{i}", (dt.date(1965, 1, 1) + dt.timedelta(days=rng.randrange(15000))).isoformat())
+            for i in range(400)]
+    realset = {d for _, d in real}
+    f = PseudonymFactory(SECRET, blocked, reserved={"birth": realset})
+    assert not [k for k, d in real if f.birth(k, d) in realset]
 
 
 # ------------------------------------------------------------------ occupations ---
