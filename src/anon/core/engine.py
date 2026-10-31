@@ -794,7 +794,11 @@ class Engine:
             return next(iter(named))
         if len(hit) == 1:
             return next(iter(hit))
-        if NAME_CUE.search(text[max(0, start - 40):start]) and len(pids) == 1:
+        # Nothing in the record decides: when exactly one person carries the given name, it is
+        # theirs (leaving it is a sure leak). A given name that is also a common word ("Abril",
+        # "Julio") still needs a cue before it. Several carriers: left as before, no guess.
+        if len(pids) == 1 and (NAME_CUE.search(text[max(0, start - 40):start])
+                               or norm(surf) not in fakes.NON_NAME_WORDS):
             return next(iter(pids))
         return None
 
