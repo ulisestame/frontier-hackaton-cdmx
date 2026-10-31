@@ -21,6 +21,7 @@ from typing import Callable
 
 from .. import fakes
 from .engine import TABLE_KEY_RX, Ctx, Engine, Person, canon, kept_lead, norm
+from .selfcheck import repair_leaks
 from .textnorm import Prepared, contains, is_bare_name, record_text
 
 SECRET = os.environ.get("ANON_SECRET", "kipu-frontier-2026-secret").encode()
@@ -426,16 +427,20 @@ class Haystack:
         # Prepared: normalize each record and the whole output once, not on every question
         self.by_id = {r["id"]: Prepared(record_text(r)) for r in records}
         self.whole = Prepared("\n".join(p.raw for p in self.by_id.values()))
+        self._has: dict[str, bool] = {}  # the repair step and build_entities ask the same questions
 
     def has(self, needle: str) -> bool:
-        return contains(self.whole, needle)
+        if needle not in self._has:
+            self._has[needle] = contains(self.whole, needle)
+        return self._has[needle]
 
     def in_records(self, rec_ids, needle: str) -> bool:
         return any(contains(self.by_id[r], needle) for r in rec_ids if r in self.by_id)
 
 
-def build_entities(eng: Engine, records: list[dict], entity_ids: dict) -> tuple[list[dict], list[str]]:
-    hay = Haystack(records)
+def build_entities(eng: Engine, records: list[dict], entity_ids: dict,
+                   hay: Haystack | None = None) -> tuple[list[dict], list[str]]:
+    hay = hay or Haystack(records)
     leaks: list[str] = []
     ents: list[dict] = []
     kept_originals: list[str] = [t for t in eng.kept_seen if len(t) >= 4]
@@ -507,8 +512,11 @@ def anonymize_corpus(corpus, state_dir: Path, progress: Callable[[dict], None] =
     capture_chat_context(eng, corpus.chats, threads)
     progress({"stage": "chats", "done": len(chats)})
     entity_ids = dict(prev.get("entity_ids", {})) if prev else {}
-    entities, leaks = build_entities(eng, chats + docs + tables, entity_ids)
-    progress({"stage": "entities", "entities": len(entities), "leaks": len(leaks)})
+    # self-check, first the repair (replace leaked originals, re-check), then the last resort below
+    eng.repaired, hay = repair_leaks(eng, chats + docs + tables, Haystack)
+    entities, leaks = build_entities(eng, chats + docs + tables, entity_ids, hay)
+    progress({"stage": "entities", "entities": len(entities), "leaks": len(leaks),
+              "repaired": sum(eng.repaired.values())})
     return eng, entity_ids, chats, docs, tables, entities, leaks
 
 
@@ -529,7 +537,8 @@ def run_pipeline(sources_url: str, token: str, out_dir: Path, state_dir: Path,
     _write_jsonl(out_dir / "docs.jsonl", docs)
     _write_jsonl(out_dir / "tables.jsonl", tables)
     (out_dir / "entities.json").write_text(json.dumps({"entities": entities}, ensure_ascii=False, indent=1), encoding="utf-8")
-    (out_dir / "report.json").write_text(json.dumps({"leaks": leaks, "warnings": eng.warnings[:500],
+    (out_dir / "report.json").write_text(json.dumps({"leaks": leaks, "repaired": dict(getattr(eng, "repaired", {})),
+                                                     "warnings": eng.warnings[:500],
                                                      "seconds": round(time.time() - t0, 1)}, ensure_ascii=False, indent=1), encoding="utf-8")
     save_state(Path(state_dir), eng, entity_ids)
     # Keep one snapshot per run: rollback point, and the before/after evidence for the incident.
