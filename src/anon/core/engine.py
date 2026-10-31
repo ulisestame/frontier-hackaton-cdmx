@@ -269,6 +269,9 @@ class Ctx:
     # identifier: computed on the first given-name-only mention that needs it.
     record_text: str = ""
     named: set[str] | None = None
+    # Documents: a hard identifier on the mention's own line (a radicado, a CL- key, a
+    # transaction's date and amount) decides between homonyms before the document-wide context.
+    lines: bool = False
 
 
 class Engine:
@@ -423,6 +426,12 @@ class Engine:
             return None
         if len(pids) == 1:
             return next(iter(pids))
+        if ctx.lines and text:
+            line = self._mention_line(pids, ctx, text)
+            if line:
+                ev = (self.evidence(line) | self.tx_evidence(line)) & pids
+                if len(ev) == 1:
+                    return next(iter(ev))
         for scope in ([ctx.author], [ctx.owner], ctx.near):
             hit = pids & {self.resolve_pid(x) for x in scope if x}
             if len(hit) == 1:
@@ -539,6 +548,22 @@ class Engine:
             for a in amounts:
                 out |= self.tx_index.get((d, a), set())
         return {self.resolve_pid(p) for p in out}
+
+    def _mention_line(self, pids: set[str], ctx: Ctx, text: str) -> str:
+        """The line of the mention a document's pick call is about. Like _tie_line, the n-th call
+        for these candidates in this text is their n-th shared mention, with a counter of its own."""
+        seq = vars(ctx).setdefault("_line_seq", {})
+        key = (hash(text), frozenset(pids))
+        if key not in seq:
+            seq[key] = [self._tie_offsets(pids, text), 0]
+        offsets, n = seq[key]
+        if not offsets:
+            return ""
+        seq[key][1] = n + 1
+        pos = offsets[n % len(offsets)]
+        start = text.rfind("\n", 0, pos) + 1
+        end = text.find("\n", pos)
+        return text[start:len(text) if end < 0 else end]
 
     def _tie_line(self, pids: set[str], ctx: Ctx, text: str) -> tuple[str, str]:
         """(line, column header) of the mention a tie call is about. find_names asks left to

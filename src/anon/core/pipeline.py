@@ -376,8 +376,8 @@ def process_doc(eng: Engine, d: dict) -> dict:
     whole = " ".join([d.get("filename", ""), d.get("title", ""), d.get("body", "")] +
                      [str(v) for v in d.get("metadata", {}).values()])
     near = eng.evidence(whole)
-    ctx = Ctx(record_id=d["id"], near=near, record_text=whole)
-    fctx = Ctx(record_id=d["id"], near=near, filename=True, record_text=whole)
+    ctx = Ctx(record_id=d["id"], near=near, record_text=whole, lines=True)
+    fctx = Ctx(record_id=d["id"], near=near, filename=True, record_text=whole, lines=True)
     return {
         "id": d["id"],
         "format": d["format"],
