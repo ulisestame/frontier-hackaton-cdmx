@@ -79,6 +79,21 @@ ADDRESS_RX = re.compile(
 ISO_DATE_RX = re.compile(r"(?<!\d)((?:19|20)\d{2})-(\d{2})-(\d{2})(?!\d)")
 SLASH_DATE_RX = re.compile(r"(?<!\d)(\d{2})/(\d{2})/((?:19|20)\d{2})(?!\d)")
 MENTION_RX = re.compile(r"<@([A-Z0-9]+)(?:\|[^>]*)?>")
+BIRTH_LONG_RX = re.compile(
+    r"(?i)(?<!\d)(\d{1,2})\s+de\s+(enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|setiembre|octubre|"
+    r"noviembre|diciembre)\s+(?:de|del)\s+((?:19|20)\d{2})(?!\d)"
+)
+_MONTH_NUM = {m: i + 1 for i, m in enumerate(("enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto",
+                                               "septiembre", "octubre", "noviembre", "diciembre"))}
+_MONTH_NUM["setiembre"] = 9
+ADDR_KEY_RX = re.compile(
+    r"(?<![a-z])(calle|cl|carrera|cra|cr|kr|kra|diagonal|dg|transversal|tv|trans|avenida|av|ak|ac|autopista|circular|cq)"
+    r"\.?\s+(\d{1,3}\s?[a-z]?(?:\s+bis)?(?:\s+[a-z](?![a-z0-9]))?(?:\s+(?:sur|norte|este|oeste))?)\s*(?:#|no\.?|n°)\s*"
+    r"(\d{1,3}\s?[a-z]?)\s*-\s*(\d{1,3})"
+)
+_ADDR_TYPE = {"calle": "cl", "carrera": "kr", "cra": "kr", "cr": "kr", "kra": "kr", "diagonal": "dg",
+              "transversal": "tv", "trans": "tv", "avenida": "av", "circular": "cq"}
+LAST4_RX = re.compile(r"(?<![\d.,/-])(\d{4})(?![\d/-]|[.,]\d)")
 TABLE_KEY_RX = re.compile(r"\b(CL-\d{4,6}|PG-\d{4,6}|TX-\d{4,7}|PQR-\d{4}-\d{3,5}|KP-\d{3})\b")
 # Ties between people of different kinds (a customer and an employee who share a short name):
 # a role next to the mention, or the corporate mailbox, points to the colleague; a customer
@@ -198,6 +213,39 @@ def canon(kind: str, value: str) -> str:
     return v
 
 
+def address_key(text: str) -> str:
+    """Street type and numbers of the first address in a text, whatever the spelling:
+    "Cra 7 #12-30" and "carrera 7 # 12 - 30 apto 201" give the same key."""
+    m = ADDR_KEY_RX.search(strip_accents(text).lower().replace("nº", "no").replace("n°", "no"))
+    if not m:
+        return ""
+    street = _ADDR_TYPE.get(m.group(1), m.group(1))
+    first, second = re.sub(r"\s+", "", m.group(2)), re.sub(r"\s+", "", m.group(3))
+    return f"{street}{first}#{second}-{m.group(4)}"
+
+
+def dates_in(text: str) -> set[str]:
+    """ISO form of every full date a text writes: 1990-04-11, 11/04/1990 (either order) or
+    "11 de abril de 1990"."""
+    out = set()
+    for m in ISO_DATE_RX.finditer(text):
+        out.add(m.group())
+    for m in SLASH_DATE_RX.finditer(text):
+        a, b, y = m.groups()
+        out.update(f"{y}-{mm}-{dd}" for dd, mm in ((a, b), (b, a)))
+    for m in BIRTH_LONG_RX.finditer(text):
+        out.add(f"{m.group(3)}-{_MONTH_NUM[m.group(2).lower()]:02d}-{int(m.group(1)):02d}")
+    return {d for d in out if _valid_iso(d)}
+
+
+def spelled_email(local: str, domain: str) -> str:
+    """'ana punto ruiz' + 'correo punto com' -> 'ana.ruiz@correo.com'."""
+    local = re.sub(r"(?i)\s+punto\s+", ".", local)
+    local = re.sub(r"(?i)\s+gui[oó]n bajo\s+", "_", local)
+    local = re.sub(r"(?i)\s+(?:guion|raya)\s+", "-", local)
+    return f"{local}@{re.sub(r'(?i)\s+punto\s+', '.', domain)}".lower()
+
+
 @dataclass
 class Ctx:
     record_id: str
@@ -230,6 +278,7 @@ class Engine:
         self.published: set[str] = set()
         # (ISO date, amount) of each transaction -> its customers: a tie-breaker for homonyms
         self.tx_index: dict[tuple[str, str], set[str]] = {}
+        self._addr_index: dict[str, set[str]] | None = None  # address_key -> persons, built on first use
 
     # ------------------------------------------------------------ registry --
     def resolve_pid(self, pid: str | None) -> str | None:
@@ -281,6 +330,8 @@ class Engine:
             return
         self.person(pid).add_id(kind, c)
         self.id_index.setdefault((kind, c), set()).add(self.resolve_pid(pid))
+        if kind == "address" and self._addr_index is not None and (key := address_key(c)):
+            self._addr_index.setdefault(key, set()).add(self.resolve_pid(pid))
 
     def merge(self, src: str, dst: str) -> None:
         """Make src an alias of dst (same real person)."""
@@ -539,7 +590,45 @@ class Engine:
             out |= self.id_index.get(("cedula", d), set()) | self.id_index.get(("phone", d), set())
         for m in TABLE_KEY_RX.finditer(text):
             out |= self.id_index.get(("key", m.group()), set())
+        for m in SPELLED_EMAIL_RX.finditer(text):
+            out |= self.id_index.get(("email", spelled_email(m.group(1), m.group(2))), set())
+        for d in dates_in(text):
+            out |= self.id_index.get(("birth", d), set())
+        if "#" in text or "-" in text:
+            addresses = self.addresses()
+            for m in ADDRESS_RX.finditer(text):
+                out |= addresses.get(address_key(m.group()), set())
         return {self.resolve_pid(p) for p in out}
+
+    def addresses(self) -> dict[str, set[str]]:
+        """address_key -> persons with that address (registry rows and addresses seen in text)."""
+        if self._addr_index is None:
+            self._addr_index = {}
+            for (kind, value), pids in self.id_index.items():
+                if kind == "address" and pids and (key := address_key(value)):
+                    self._addr_index.setdefault(key, set()).update(pids)
+        return self._addr_index
+
+    def evidence_among(self, text: str, cands: set[str]) -> set[str]:
+        """Softer clues that only make sense inside a known set of homonyms: a transaction's date
+        and amount, the last four digits of a cédula or phone ("termina en 4821"), or the full
+        name with both surnames (an attachment like "extracto_ana_ruiz_mora.pdf")."""
+        cands = {self.resolve_pid(c) for c in cands}
+        out = self.tx_evidence(text) & cands
+        undated = text  # the year of a date ("de 1998", "desde 1998") is not a tail
+        for rx in (ISO_DATE_RX, SLASH_DATE_RX, BIRTH_LONG_RX, YEAR_CTX_RX):
+            undated = rx.sub(" ", undated)
+        tails = {m.group(1) for m in LAST4_RX.finditer(undated)}
+        flat = " " + " ".join(ntoks(text.replace("_", " "))) + " "
+        for pid in cands:
+            p = self.persons.get(pid)
+            if p is None:
+                continue
+            if tails and any(v[-4:] in tails for k in ("cedula", "phone") for v in p.ids.get(k, ()) if len(v) > 4):
+                out.add(pid)
+            if len(p.given) + len(p.surnames) >= 3 and f" {' '.join(ntoks(p.full))} " in flat:
+                out.add(pid)
+        return out
 
     def owner_for_unknown(self, ctx: Ctx, kind: str, value: str) -> Person:
         if ctx.owner and self.resolve_pid(ctx.owner) in self.persons:

@@ -220,9 +220,10 @@ def build_registry(eng: Engine, corpus) -> dict:
     for upid, cands in ambiguous.items():
         uid = upid[2:]
         text = "\n".join(x for t in threads.values() if uid in t["users"] for x in t["text"])
+        cands = {eng.resolve_pid(c) for c in cands}
         ev = eng.evidence(text) & cands
-        if not ev:  # a date and an amount that match one homonym's transaction
-            ev = eng.tx_evidence(text) & cands
+        if not ev:  # softer clues, checked only against these homonyms
+            ev = eng.evidence_among(text, cands)
         if len(ev) == 1:
             eng.merge(upid, next(iter(ev)))
     # Users with no name match (deactivated accounts, nicknames): link them only through hard

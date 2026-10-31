@@ -7,6 +7,8 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
+import pytest
+
 from anon import fakes
 from anon.core.engine import Engine
 from anon.core.pipeline import SECRET, build_registry
@@ -50,6 +52,29 @@ def test_a_company_email_is_not_linked_to_a_customer_homonym():
     users = {"U1": _user("Renata Oquendo Lizcano", title="Analista", email="r.oquendo@kipupay.co")}
     eng = _registry(users, _thread("U1", "hola"), staff=True)
     assert eng.resolve_pid("u:U1") == "kp:KP-901"
+
+
+@pytest.mark.parametrize("text, expected", [
+    ("Los últimos 4 de la cédula: 5678", "cl:CL-90001"),
+    ("nací el 23 de noviembre de 1984", "cl:CL-90002"),
+    ("me la mandan a la cra 80 #9-12 por favor", "cl:CL-90002"),
+    ("mi correo es renata punto lizcano arroba example punto com", "cl:CL-90001"),
+])
+def test_a_clue_in_the_thread_decides_between_homonyms(text, expected):
+    eng = _registry({"U1": _user("Renata Oquendo")}, _thread("U1", "hola", text))
+    assert eng.resolve_pid("u:U1") == expected
+
+
+def test_a_full_name_in_an_attachment_decides_between_homonyms():
+    chats = _thread("U1", "adjunto el soporte", attachments=("extracto_renata_oquendo_velez.pdf",))
+    eng = _registry({"U1": _user("Renata Oquendo")}, chats)
+    assert eng.resolve_pid("u:U1") == "cl:CL-90002"
+
+
+@pytest.mark.parametrize("text", ["tengo la cuenta desde 1998", "la abrí el 3 de mayo de 1998"])
+def test_a_year_is_not_read_as_the_last_digits(text):
+    eng = _registry({"U1": _user("Renata Oquendo")}, _thread("U1", text))
+    assert eng.resolve_pid("u:U1") == "u:U1"  # no clue: stays its own person
 
 
 def test_a_homonym_linked_to_another_user_is_ruled_out():
