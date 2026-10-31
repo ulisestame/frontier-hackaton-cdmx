@@ -55,22 +55,49 @@ def only_digits(s: str) -> str:
     return "".join(c for c in s if c.isdigit())
 
 
-def _digits_in(haystack: str, digits: str) -> bool:
-    compact = compact_digits(haystack)
+class Prepared:
+    """A haystack whose normalized and digit-compacted forms are computed once.
+
+    contains() accepts it in place of a str and returns exactly the same answer; the
+    entity self-check asks thousands of questions of the same multi-megabyte output.
+    """
+
+    __slots__ = ("raw", "_normed", "_compact")
+
+    def __init__(self, raw: str):
+        self.raw = raw
+        self._normed: str | None = None
+        self._compact: str | None = None
+
+    @property
+    def normed(self) -> str:
+        if self._normed is None:
+            self._normed = norm(self.raw)
+        return self._normed
+
+    @property
+    def compact(self) -> str:
+        if self._compact is None:
+            self._compact = compact_digits(self.raw)
+        return self._compact
+
+
+def _digits_in(haystack: "str | Prepared", digits: str) -> bool:
+    compact = haystack.compact if isinstance(haystack, Prepared) else compact_digits(haystack)
     candidates = {digits}
     if len(digits) == 12 and digits.startswith("57"):
         candidates.add(digits[2:])
     return any(re.search(rf"(?<!\d)(?:57)?{re.escape(d)}(?!\d)", compact) for d in candidates)
 
 
-def contains(haystack: str, needle: str) -> bool:
+def contains(haystack: "str | Prepared", needle: str) -> bool:
     """Port of contiene(): does the judge consider `needle` present in `haystack`?"""
     if not needle:
         return False
     digits = only_digits(needle)
     if digits and len(digits) >= 6 and len(digits) >= 0.6 * len(needle) and not re.search(r"[a-zA-Z]", needle):
         return _digits_in(haystack, digits)
-    h = norm(haystack)
+    h = haystack.normed if isinstance(haystack, Prepared) else norm(haystack)
     n = norm(needle)
     if _RX_TEXT.match(n) and re.search(r"[a-z]", n):
         if re.search(rf"(?<![a-z0-9]){re.escape(n)}(?![a-z0-9])", h):

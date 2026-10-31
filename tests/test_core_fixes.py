@@ -67,3 +67,62 @@ def test_real_values_are_reserved_before_generation():
     eng = _engine()
     assert "1991-04-09" in eng.f.reserved["birth"]
     assert "70482916" in eng.f.reserved["cedula"]
+
+
+# ------------------------------------------------- short names resolved by the record ---
+
+def _people_engine() -> Engine:
+    eng = Engine(fakes.PseudonymFactory(SECRET))
+    eng.add_person("kp:29", "employee", "Tomás Felipe Corredor Ibarra", city="Medellín")
+    eng.add_person("cl:9", "customer", "Tomás Felipe Cárdenas Villa", city="Cali")
+    eng.add_person("kp:30", "employee", "Joaquín Salazar Ruiz", city="Medellín")
+    eng.add_person("cl:10", "customer", "Joaquín Pérez Mejía", city="Bogotá")
+    eng.f = fakes.PseudonymFactory(SECRET, {fakes.normalize_token(t) for p in eng.persons.values()
+                                            for t in p.given + p.surnames})
+    return eng
+
+
+def _ctx(text: str, **kw) -> Ctx:
+    return Ctx(record_id="doc", record_text=text, **kw)
+
+
+def test_given_names_go_to_the_person_named_in_full_in_the_record():
+    eng = _people_engine()
+    text = "Asistentes: Tomás Felipe Corredor. Tomás Felipe corre la regresión el viernes."
+    out = eng.anonymize_text(text, _ctx(text))
+    first = " ".join(eng.pname(eng.persons["kp:29"])["given"])
+    assert "Tomás Felipe" not in out
+    assert out.count(first) == 2  # the full mention and the given-name-only one
+
+
+def test_lone_given_name_resolved_when_the_record_names_one_such_person_in_full():
+    eng = _people_engine()
+    text = "Joaquín Salazar prepara el tablero.\n| Tablero | Joaquín | 8 de octubre |"
+    out = eng.anonymize_text(text, _ctx(text))
+    assert "Joaquín" not in out
+    assert eng.pname(eng.persons["kp:30"])["given"][0] in out.split("|")[2]
+
+
+def test_lone_given_name_still_left_when_the_record_does_not_decide():
+    eng = _people_engine()
+    text = "Joaquín entrega el tablero."  # nobody named in full: unchanged behaviour
+    assert eng.anonymize_text(text, _ctx(text)).startswith("Joaquín entrega")
+    text = "Joaquín Salazar y Joaquín Pérez revisan. Joaquín cierra."  # two in full
+    assert "Joaquín cierra" in eng.anonymize_text(text, _ctx(text))
+
+
+def test_record_text_from_another_field_counts():
+    eng = _people_engine()
+    body = "Responsable: Tomás Felipe Cárdenas."
+    title = "Seguimiento de Tomás Felipe"
+    out = eng.anonymize_text(title, _ctx(f"{title} {body}"))
+    assert "Tomás Felipe" not in out
+    assert " ".join(eng.pname(eng.persons["cl:9"])["given"]) in out
+
+
+def test_prepared_haystack_answers_like_a_plain_string():
+    from anon.core.textnorm import Prepared, contains
+    hay = "Hola Mariana Peñaloza, CC 1.093.418.276, cel +57 315 604 2817; Diagonal 7B # 41-9 apto 1501"
+    for needle in ("Mariana Peñaloza", "mariana penaloza", "1093418276", "3156042817", "Diagonal 7B # 41-9",
+                   "Peñaloza", "1093418", "Laura", "", "apto 1501"):
+        assert contains(Prepared(hay), needle) == contains(hay, needle), needle
