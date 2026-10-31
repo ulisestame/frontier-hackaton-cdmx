@@ -68,12 +68,16 @@ SPELLED_EMAIL_RX = re.compile(
 PHONE_RX = re.compile(r"(?<![\d+])(?:\+?57[\s.-]?)?\(?3\d{2}\)?[\s.-]?\d{3}[\s.-]?\d{2}[\s.-]?\d{2}(?!\d)")
 NUMBER_RX = re.compile(r"(?<![\d.,])(\d{1,3}(?:[.\s]\d{3}){1,3}|\d{6,10})(?![\d]|[.,]\d)")
 ID_CUE = re.compile(r"(?i)(?:\bc\.?\s?c\.?|c[ée]dula|documento|identificaci[oó]n|\bc\.?e\.?\b|\bnit\b|\bt\.?i\.?\b|\bid\b|n[uú]mero de identificaci[oó]n)[\s:#.,n°ºo]*(?:es\s+|del\s+titular\s+|:)?\s*$")
-# Bank accounts and card numbers after a cue ("cuenta de ahorros 0123 4567 890", "tarjeta 4111-...").
-# 9+ digits only: last-4 mentions ("terminada en 7777") and 8-digit obligation numbers stay.
+# Bank accounts, card numbers and insurance policies after a cue ("cuenta de ahorros 0123 4567 890",
+# "tarjeta 4111-...", "póliza Sura 5512345"). Accounts and cards need 9+ digits, policies 6+, so
+# last-4 mentions ("terminada en 7777"), obligation numbers (####-####) and keys such as
+# PQR-2099-0001 or PSE-11112222 stay as they are.
 ACCOUNT_RX = re.compile(
-    r"(?i)(?:\bcuenta|\bcta\.?|\bahorros|\bcorriente|\btarjeta|\btc\b|\bd[ée]bito|\bcr[ée]dito|\baccount|\bcard)"
-    r"(?:[^\d\n.]|\.(?!\s)){0,40}?"  # "cuenta de Bancolombia? Es la ...": a short bridge, same sentence
-    r"[:#]?\s*(\d(?:[ .-]?\d){8,18})(?![\d])(?!\s*(?:pesos|cop|mil|millones)\b)")
+    r"(?i)(?P<cue>\bcuenta|\bcta\.?|\bahorros|\bcorriente|\btarjeta|\btc\b|\bd[ée]bito|\bcr[ée]dito|\baccount"
+    r"|\bcard|\bp[óo]liza|\bpolicy)"
+    r"(?:[^\d\n.;]|\.(?!\s)){0,40}?"  # "cuenta de Bancolombia? Es la ...": a short bridge, same sentence
+    r"[:#]?\s*(\d(?:[ .-]?\d){5,18})(?![\d])(?!\s*(?:pesos|cop|mil|millones)\b)")
+OBLIGATION_RX = re.compile(r"\d{4}-\d{4}")
 IPV4_RX = re.compile(r"(?<![\d.])((?:25[0-5]|2[0-4]\d|1?\d?\d)(?:\.(?:25[0-5]|2[0-4]\d|1?\d?\d)){3})(?![\d]|\.\d)")
 PLATE_RX = re.compile(r"(?<![A-Za-z0-9])([A-Z]{3})([- ]?)(\d{3}|\d{2}[A-Z])(?![A-Za-z0-9])")
 PLATE_STOP = {"USD", "COP", "EUR", "MXN", "PQR", "INC", "CEO", "CTO", "CFO", "COO", "SOAT", "API", "PDF", "IVA", "GMF"}
@@ -722,10 +726,16 @@ class Engine:
                 self.index_id(p.pid, kind, d)
             val = self.pseudo(kind, p, d)
             add(m.start(1), m.end(1), fakes.format_like(surf, val), kind, p, surf, kind, val)
-        # bank accounts / card numbers (cue + 9-19 digits, any grouping)
+        # bank accounts / card numbers / insurance policies (cue + digits, any grouping)
         for m in ACCOUNT_RX.finditer(text):
-            surf = m.group(1)
+            surf = m.group(2)
             d = only_digits(surf)
+            policy = re.search(r"(?i)p[óo]liza|policy", m.group(0)[: m.start(2) - m.start()]) is not None
+            if len(d) < (6 if policy else 9) or OBLIGATION_RX.fullmatch(surf):
+                continue
+            if text[max(0, m.start(2) - 1):m.start(2)] == "-" or TABLE_KEY_RX.search(
+                    text[max(0, m.start(2) - 6):m.end(2) + 1]):
+                continue  # the tail of a key such as PQR-2099-0001 or PSE-11112222
             if (len(d) == 10 and d.startswith("3")) or self.id_index.get(("cedula", d)):
                 continue  # a phone or a known cédula: handled by their own detectors
             pids = self.id_index.get(("account", d), set())
@@ -733,7 +743,7 @@ class Engine:
             if not pids:
                 self.index_id(p.pid, "account", d)
             val = self.pseudo("account", p, d)
-            add(m.start(1), m.end(1), fakes.format_like(surf, val), "account", p, surf, "account", val)
+            add(m.start(2), m.end(2), fakes.format_like(surf, val), "account", p, surf, "account", val)
         # IPv4 addresses
         for m in IPV4_RX.finditer(text):
             ip = m.group(1)

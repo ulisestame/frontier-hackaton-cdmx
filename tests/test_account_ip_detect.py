@@ -81,3 +81,17 @@ def test_large_amount_after_cuenta_is_not_an_account():
     eng = _engine()
     text = "La cuenta recibió 1.250.000.000 pesos del fondo."
     assert _run(eng, text) == text
+
+
+def test_insurance_policy_numbers_are_replaced_keeping_format():
+    eng = _engine()
+    out = _run(eng, "Débito de la póliza Seguros Andinos 2071834 aplicado; pago póliza Sura 55-12345.")
+    assert "2071834" not in out and "55-12345" not in out
+    assert re.search(r"póliza Seguros Andinos \d{7} aplicado; pago póliza Sura \d{2}-\d{5}\.", out)
+
+
+def test_policy_cue_does_not_reach_keys_obligations_or_pse_references():
+    eng = _engine()
+    text = ("Débito automático de póliza mensual activo, petición PQR-2099-0001 cerrada; "
+            "la póliza del crédito 7310-0042 sigue; pago póliza PSE-11112222 confirmado.")
+    assert _run(eng, text) == text
