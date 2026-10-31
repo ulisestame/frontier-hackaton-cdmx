@@ -73,7 +73,7 @@
 </table></div>
 
 <div class="split">
-  <div class="half repl"><div class="k"><span class="sg" aria-hidden="true">−</span>Se reemplaza</div><p>Toda persona natural (clientes, empleados, autores de chat, terceros nombrados) y sus datos: nombre, correo (también deletreado), cédula, celular, dirección, fecha de nacimiento, placa, pasaporte, cuenta, tarjeta y @usuario, dondequiera que aparezcan.</p></div>
+  <div class="half repl"><div class="k"><span class="sg" aria-hidden="true">−</span>Se reemplaza</div><p>Toda persona natural (clientes, empleados, autores de chat, terceros nombrados) y sus datos: nombre, correo (también deletreado), cédula, celular, dirección, fecha de nacimiento, placa, pasaporte, cuenta y @usuario, dondequiera que aparezcan.</p></div>
   <div class="half keep"><div class="k"><span class="sg" aria-hidden="true">=</span>Se conserva</div><p>Organizaciones, marcas, lugares y figuras públicas; montos, fechas de transacciones y PQR, estados y canales; llaves entre tablas (CL-, TX-, PQR-, KP-, PG-, radicados); el dominio corporativo de los correos y los buzones de rol.</p></div>
 </div>
 
@@ -118,7 +118,7 @@
   <li><b>Registro de personas, tablas primero.</b> Clientes, empleados y perfiles de chat, con sus identificadores duros. Un cliente migrado con id nuevo se une a uno existente solo si su cédula coincide con exactamente uno. <span class="tag store">state.json</span></li>
   <li class="is-ia"><b>Detección.</b>
     <ul class="layers">
-      <li><span class="lk">(a)</span> Reglas: nombres conocidos y desconocidos, correos (también deletreados), celulares, cédulas, direcciones, fechas de nacimiento, placas, pasaportes, tarjetas, cuentas, menciones, handles y slugs; lista de términos conservados <span class="tag code">código</span></li>
+      <li><span class="lk">(a)</span> Reglas: nombres conocidos y desconocidos, correos (también deletreados), celulares, cédulas, direcciones, fechas de nacimiento, placas, pasaportes, cuentas, menciones, handles y slugs; lista de términos conservados <span class="tag code">código</span></li>
       <li><span class="lk">(b)</span> Siguiente paso, Rama de IA: solo el residuo ambiguo, con caché y fail-closed <span class="tag ai">IA</span></li>
     </ul></li>
   <li><b>Vinculación.</b> Cada mención → persona: autor, dueño del registro, participantes del hilo y evidencia dura; si nada decide, regla determinista con advertencia. Prioridad por tipo, filtro por tipo, pase de eliminación, evidencia ampliada y por línea, y desempates de homónimos <span class="tag en-curso">en curso</span>.</li>

@@ -30,424 +30,298 @@
 <figure class="diagram">
 <p class="hint">Desliza horizontalmente para ver el diagrama completo.</p>
 <div class="scroll">
-<svg id="diagrama" class="dg" viewBox="0 0 1500 1192" fill="#12161D" role="img" aria-labelledby="dg-title dg-desc" xmlns="http://www.w3.org/2000/svg">
-<title id="dg-title">Arquitectura del servicio de anonimización del corpus de Kipu Pay</title>
-<desc id="dg-desc">De izquierda a derecha: la API de fuentes entra al pipeline de código (ingesta, normalización, bóveda de identidades); en la detección el flujo se bifurca en una rama de código para la mayor parte del volumen y una rama de IA solo para el residuo ambiguo, cuyas decisiones se guardan como reglas; luego resolución, seudónimos, cuasi-identificadores, reescritura y un verificador de fugas antes de publicar output/. Un disco persistente (/data) guarda state.json, una carpeta de salida por corrida con su puntero CURRENT y el estado de cada job. La rama de IA es el siguiente paso: la v1 funciona solo con reglas.</desc>
+<svg id="diagrama" class="dg" viewBox="0 0 1200 912" fill="#12161D" role="img" aria-labelledby="dg-title dg-desc" xmlns="http://www.w3.org/2000/svg">
+<title id="dg-title">Arquitectura del servicio de anonimización del corpus de Kipu Pay, tal como está construido</title>
+<desc id="dg-desc">El evaluador llama a la API HTTP /v1. POST /run crea un job; el JobManager lanza el proceso cli run, lo relanza hasta 2 veces y lo corta a los 115 minutos. El proceso descarga las fuentes a raw/, normaliza, arma el registro de personas, detecta con reglas (la rama de IA es el siguiente paso), vincula menciones, asigna seudónimos con HMAC y state.json, generaliza cuasi-identificadores, reemplaza fragmentos, se autoverifica y publica de forma atómica en output/ con el puntero CURRENT. /anonymize en vivo lee state.json. Un vigía local compara record_index.</desc>
 <!--
   GUÍA DE EDICIÓN
-  - Cada componente es un <g id="..."> con transform="translate(x y)"; las coordenadas internas son relativas a su caja.
-    Para mover una caja basta cambiar su translate (y revisar las flechas que llegan a ella).
-  - Todas las flechas y conectores van al final, en coordenadas absolutas, agrupados por tipo (#flechas-flujo, #ruta-en-vivo, ...).
-  - Tipos (.t, .t13, .t15, .d, .dm, .m, .s, .ph, .b) y colores viven en /assets/tema.css, sección "Diagrama".
-  - Los fill/stroke de este SVG son tokens: tema.css los reasigna a la paleta del sitio (oscura en pantalla, clara al imprimir).
-    Usa solo: texto #12161D · secundario #5A6371 · caja #FFFFFF · código #0E7C66 · IA #C2410C · almacén #3B5B8C ·
-    fuga/control #B42318 · HTTP y ruta en vivo #1F3FBF · etiqueta Dn #F5D565 · regla fina #D9DDE4.
-  - Cada caja lleva una clase de rol (caja-codigo, caja-ia, caja-almacen, caja-control, caja-externo, caja-salida,
-    caja-http, nota-decision) para reestilizar con CSS.
-  - Trazo discontinuo en la rama de IA, OpenRouter, el bucle de aprendizaje y la nota de escala = siguiente paso, aún no activo en la v1.
+  - Cada componente es un <g id="..."> con transform="translate(x y)"; dentro, coordenadas relativas a su caja.
+  - Flechas y conectores al final, en coordenadas absolutas (#flechas, #ruta-en-vivo, #conectores-data).
+  - Colores = tokens que tema.css reasigna. Clases de rol: caja-codigo, caja-ia, caja-almacen, caja-control,
+    caja-externo, caja-http, caja-job, caja-proceso, caja-vivo, caja-salida, caja-servicio.
+  - Trazo discontinuo naranja = siguiente paso (no existe en la v1).
+  - Trabajo del sprint: clase "en-curso". Para quitarlo, borrar todo elemento con class="... en-curso".
+  - El <style> de abajo es solo respaldo para ver el SVG suelto: :where() pesa cero, así tema.css siempre gana.
 -->
+<style>
+:where(.dg) .t{font:700 14px "Atkinson Hyperlegible Next","IBM Plex Sans",system-ui,sans-serif}
+:where(.dg) .t13{font:700 13px "Atkinson Hyperlegible Next","IBM Plex Sans",system-ui,sans-serif}
+:where(.dg) .d{font:400 12.5px "Atkinson Hyperlegible Next","IBM Plex Sans",system-ui,sans-serif}
+:where(.dg) .dm{font:700 12.5px "Atkinson Hyperlegible Next","IBM Plex Sans",system-ui,sans-serif}
+:where(.dg) .m{font:500 12px "Martian Mono","IBM Plex Mono",ui-monospace,monospace;font-stretch:75%}
+:where(.dg) .s{font:400 11px "Martian Mono","IBM Plex Mono",ui-monospace,monospace;font-stretch:75%}
+:where(.dg) .b{font:700 11px "Martian Mono","IBM Plex Mono",ui-monospace,monospace;font-stretch:75%}
+</style>
 <defs>
 <marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="9" markerHeight="9" markerUnits="userSpaceOnUse" orient="auto-start-reverse"><path d="M0,0L10,5L0,10z" fill="#12161D"/></marker>
 <marker id="ah-mut" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="9" markerHeight="9" markerUnits="userSpaceOnUse" orient="auto-start-reverse"><path d="M0,0L10,5L0,10z" fill="#5A6371"/></marker>
 <marker id="ah-code" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="10" markerHeight="10" markerUnits="userSpaceOnUse" orient="auto-start-reverse"><path d="M0,0L10,5L0,10z" fill="#0E7C66"/></marker>
-<marker id="ah-code-lg" viewBox="0 0 10 10" refX="2" refY="5" markerWidth="20" markerHeight="20" markerUnits="userSpaceOnUse" orient="auto"><path d="M0,0L10,5L0,10z" fill="#0E7C66"/></marker>
 <marker id="ah-ai" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="10" markerHeight="10" markerUnits="userSpaceOnUse" orient="auto-start-reverse"><path d="M0,0L10,5L0,10z" fill="#C2410C"/></marker>
 <marker id="ah-acc" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="10" markerHeight="10" markerUnits="userSpaceOnUse" orient="auto-start-reverse"><path d="M0,0L10,5L0,10z" fill="#1F3FBF"/></marker>
-<marker id="ah-dan" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="10" markerHeight="10" markerUnits="userSpaceOnUse" orient="auto-start-reverse"><path d="M0,0L10,5L0,10z" fill="#B42318"/></marker>
+<marker id="ah-store" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="9" markerHeight="9" markerUnits="userSpaceOnUse" orient="auto-start-reverse"><path d="M0,0L10,5L0,10z" fill="#3B5B8C"/></marker>
 </defs>
-<rect id="fondo" x="0" y="0" width="1500" height="1192" fill="#FFFFFF"/>
+<rect id="fondo" x="0" y="0" width="1200" height="912" fill="#FFFFFF"/>
 
-<!-- ===================== FASES (eje izquierda → derecha) ===================== -->
-<g id="fases">
-  <rect x="14" y="14" width="170" height="28" rx="14" fill="#12161D"/>
-  <text x="99" y="32" text-anchor="middle" class="ph" fill="#FFFFFF">ENTRADA</text>
-  <rect x="226" y="14" width="220" height="28" rx="14" fill="#E8F4F1" stroke="#0E7C66"/>
-  <text x="336" y="32" text-anchor="middle" class="ph" fill="#0E7C66">PIPELINE · CÓDIGO</text>
-  <rect x="472" y="14" width="340" height="28" rx="14" fill="#FFFFFF" stroke="#5A6371"/>
-  <text x="642" y="32" text-anchor="middle" class="ph" fill="#12161D">BIFURCACIÓN: <tspan fill="#0E7C66">CÓDIGO</tspan> | <tspan fill="#C2410C">IA</tspan></text>
-  <rect x="854" y="14" width="396" height="28" rx="14" fill="#E8F4F1" stroke="#0E7C66"/>
-  <text x="1052" y="32" text-anchor="middle" class="ph" fill="#0E7C66">RESOLUCIÓN Y CONTROL · CÓDIGO</text>
-  <rect x="1282" y="14" width="192" height="28" rx="14" fill="#12161D"/>
-  <text x="1378" y="32" text-anchor="middle" class="ph" fill="#FFFFFF">SALIDA</text>
-  <g stroke="#5A6371" stroke-width="1.5" fill="none" marker-end="url(#ah-mut)"><path d="M190 28H220"/><path d="M450 28H466"/><path d="M818 28H848"/><path d="M1256 28H1276"/></g>
+<!-- ===================== ACTORES EXTERNOS ===================== -->
+<g id="actor-evaluador" transform="translate(14 46)">
+  <rect class="caja-externo" width="162" height="100" rx="10" fill="#EEF0F3" stroke="#5A6371" stroke-width="1.2"/>
+  <text x="12" y="18" class="s" fill="#5A6371">EXTERNO</text>
+  <text x="12" y="38" class="t">Evaluador / jurado</text>
+  <text x="12" y="56" class="d" fill="#5A6371">programa que puntúa:</text>
+  <text x="12" y="76" class="s">fuga 45 · utilidad 35</text>
+  <text x="12" y="92" class="s">consistencia 20</text>
+</g>
+<g id="actor-api-fuentes" transform="translate(14 262)">
+  <rect class="caja-externo" width="162" height="156" rx="10" fill="#EEF0F3" stroke="#5A6371" stroke-width="1.2"/>
+  <text x="12" y="18" class="s" fill="#5A6371">EXTERNO · PROVISTA</text>
+  <text x="12" y="38" class="t">API de fuentes</text>
+  <text x="12" y="58" class="d" fill="#5A6371">token del equipo</text>
+  <text x="12" y="75" class="d">límite 600 pet./min</text>
+  <text x="12" y="92" class="d">(nosotros, 500/min)</text>
+  <text x="12" y="109" class="d">ETag en record_index</text>
+  <text x="12" y="126" class="d">reintentos 429/5xx</text>
+  <text x="12" y="143" class="d">con Retry-After</text>
+</g>
+<g id="actor-vigia" transform="translate(14 450)">
+  <rect class="caja-externo" width="162" height="118" rx="10" fill="#EEF0F3" stroke="#5A6371" stroke-width="1.2"/>
+  <text x="12" y="18" class="s" fill="#5A6371">SCRIPT LOCAL</text>
+  <text x="12" y="38" class="t">Vigía</text>
+  <text x="12" y="58" class="s">watch_sources.py</text>
+  <text x="12" y="75" class="d">sondea record_index</text>
+  <text x="12" y="92" class="d">y avisa con el diff</text>
+  <text x="12" y="109" class="d">cuando crece</text>
+</g>
+
+<!-- ===================== LEYENDA ===================== -->
+<g id="leyenda" transform="translate(14 590)">
+  <rect width="162" height="236" rx="10" fill="#FFFFFF" stroke="#D9DDE4"/>
+  <text x="12" y="22" class="t">Leyenda</text>
+  <rect x="13" y="35" width="12" height="12" fill="#0E7C66"/><text x="34" y="46" class="d">Código</text>
+  <path d="M19 56.5L26.5 64L19 71.5L11.5 64Z" fill="#C2410C"/><text x="34" y="68" class="d">IA · siguiente paso</text>
+  <rect x="13.75" y="80.75" width="10.5" height="10.5" fill="none" stroke="#3B5B8C" stroke-width="2"/><text x="34" y="90" class="d">Almacenamiento</text>
+  <circle cx="19" cy="108" r="6.5" fill="#B42318"/><text x="34" y="112" class="d">Autoverificación</text>
+  <rect x="12" y="123" width="14" height="14" rx="3" fill="#EEF0F3" stroke="#5A6371" stroke-width="1.2"/><text x="34" y="134" class="d">Externo</text>
+  <path d="M11 152H26" stroke="#12161D" stroke-width="1.6" fill="none" marker-end="url(#ah)"/><text x="34" y="156" class="d">Flujo de datos</text>
+  <path d="M11 174H27" stroke="#1F3FBF" stroke-width="2" stroke-dasharray="4 3" fill="none"/><text x="34" y="178" class="d">Ruta en vivo</text>
+  <path d="M11 196H27" stroke="#3B5B8C" stroke-width="1.4" stroke-dasharray="3 3" fill="none"/><text x="34" y="200" class="d">Lee / escribe /data</text>
+  <text x="12" y="224" class="s en-curso" fill="#5A6371">en curso: sprint</text>
 </g>
 
 <!-- ===================== SERVICIO (contenedor siempre encendido) ===================== -->
 <g id="servicio">
-  <rect class="caja-servicio" x="198" y="58" width="1290" height="720" rx="14" fill="#FFFFFF" stroke="#5A6371" stroke-width="1.5"/>
-  <text x="214" y="82" class="t">Servicio · un contenedor siempre encendido (Railway)</text>
-  <g id="badge-d1"><rect x="590" y="69" width="28" height="18" rx="4" fill="#F5D565"/><text x="604" y="82" text-anchor="middle" class="b">D1</text></g>
-  <text x="1474" y="82" text-anchor="end" class="d" fill="#5A6371"><tspan fill="#0E7C66" font-weight="600">Código para el volumen</tspan>, <tspan fill="#C2410C" font-weight="600">IA solo donde hace falta</tspan>; lo aprendido se guarda como datos (reglas), no como código.</text>
+  <rect class="caja-servicio" x="190" y="12" width="998" height="886" rx="14" fill="#FFFFFF" stroke="#5A6371" stroke-width="1.5"/>
+  <text x="206" y="34" class="t">Servicio · un contenedor siempre encendido (Railway)</text>
+  <text x="1172" y="34" text-anchor="end" class="s" fill="#5A6371">run.sh relanza uvicorn · Railway: healthcheck y reinicio</text>
 </g>
 
-<!-- Capa HTTP: 6 endpoints del contrato -->
-<g id="capa-http" transform="translate(212 94)">
-  <rect class="caja-http" width="1262" height="84" rx="10" fill="#ECEFFB" stroke="#1F3FBF" stroke-width="1.2"/>
-  <text x="14" y="22" class="t" fill="#1F3FBF">Capa HTTP · FastAPI · /v1 · sin autenticación (acepta Authorization si llega)</text>
-  <g id="ep-health"><rect x="14" y="34" width="140" height="34" rx="17" fill="#FFFFFF" stroke="#1F3FBF"/><text x="84" y="55.5" text-anchor="middle" class="m" fill="#1F3FBF">GET /health</text></g>
-  <g id="ep-anonymize"><rect x="212" y="34" width="140" height="34" rx="17" fill="#FFFFFF" stroke="#1F3FBF" stroke-width="1.5" stroke-dasharray="5 3"/><text x="282" y="55.5" text-anchor="middle" class="m" fill="#1F3FBF">POST /anonymize</text></g>
-  <g id="ep-run"><rect x="508" y="34" width="130" height="34" rx="17" fill="#FFFFFF" stroke="#1F3FBF"/><text x="573" y="55.5" text-anchor="middle" class="m" fill="#1F3FBF">POST /run</text></g>
-  <g id="ep-run-estado"><rect x="654" y="34" width="160" height="34" rx="17" fill="#FFFFFF" stroke="#1F3FBF"/><text x="734" y="55.5" text-anchor="middle" class="m" fill="#1F3FBF">GET /run/{job_id}</text></g>
-  <g id="ep-entities"><rect x="888" y="34" width="150" height="34" rx="17" fill="#FFFFFF" stroke="#1F3FBF"/><text x="963" y="55.5" text-anchor="middle" class="m" fill="#1F3FBF">GET /entities</text></g>
-  <g id="ep-output"><rect x="1074" y="34" width="184" height="34" rx="17" fill="#FFFFFF" stroke="#1F3FBF"/><text x="1166" y="55.5" text-anchor="middle" class="m" fill="#1F3FBF">GET /output/{archivo}</text></g>
+<g id="capa-http" transform="translate(202 46)">
+  <rect class="caja-http" width="974" height="76" rx="10" fill="#ECEFFB" stroke="#1F3FBF" stroke-width="1.2"/>
+  <text x="14" y="20" class="t" fill="#1F3FBF">HTTP /v1 · FastAPI · sin autenticación (lo pide el contrato)</text>
+  <g id="ep-anonymize"><rect x="14" y="32" width="146" height="30" rx="15" fill="#FFFFFF" stroke="#1F3FBF" stroke-width="1.5" stroke-dasharray="5 3"/><text x="87" y="52" text-anchor="middle" class="m" fill="#1F3FBF">POST /anonymize</text></g>
+  <g id="ep-health"><rect x="170" y="32" width="118" height="30" rx="15" fill="#FFFFFF" stroke="#1F3FBF"/><text x="229" y="52" text-anchor="middle" class="m" fill="#1F3FBF">GET /health</text></g>
+  <g id="ep-run"><rect x="382" y="32" width="110" height="30" rx="15" fill="#FFFFFF" stroke="#1F3FBF"/><text x="437" y="52" text-anchor="middle" class="m" fill="#1F3FBF">POST /run</text></g>
+  <g id="ep-run-estado"><rect x="502" y="32" width="152" height="30" rx="15" fill="#FFFFFF" stroke="#1F3FBF"/><text x="578" y="52" text-anchor="middle" class="m" fill="#1F3FBF">GET /run/{job_id}</text></g>
+  <g id="ep-output"><rect x="662" y="32" width="178" height="30" rx="15" fill="#FFFFFF" stroke="#1F3FBF"/><text x="751" y="52" text-anchor="middle" class="m" fill="#1F3FBF">GET /output/{archivo}</text></g>
+  <g id="ep-entities"><rect x="850" y="32" width="110" height="30" rx="15" fill="#FFFFFF" stroke="#1F3FBF"/><text x="905" y="52" text-anchor="middle" class="m" fill="#1F3FBF">GET /entities</text></g>
 </g>
 
-<!-- ===================== ACTORES EXTERNOS (columna ENTRADA) ===================== -->
-<g id="actor-evaluador" transform="translate(14 94)">
-  <rect class="caja-externo" width="170" height="106" rx="10" fill="#EEF0F3" stroke="#5A6371" stroke-width="1.2"/>
-  <text x="14" y="18" class="s" fill="#5A6371">EXTERNO</text>
-  <text x="14" y="38" class="t">Evaluador / jurado</text>
-  <text x="14" y="55" class="d" fill="#5A6371">programa que puntúa:</text>
-  <text x="14" y="76" class="s">fuga 45 · utilidad 35</text>
-  <text x="14" y="93" class="s">consistencia 20</text>
+<g id="anonymize-en-vivo" transform="translate(202 148)">
+  <rect class="caja-vivo" width="290" height="92" rx="10" fill="#ECEFFB" stroke="#1F3FBF" stroke-width="1.5" stroke-dasharray="5 3"/>
+  <text x="14" y="21" class="t" fill="#1F3FBF">/anonymize en vivo</text>
+  <text x="14" y="41" class="d">lee state.json (caché por mtime) →</text>
+  <text x="14" y="58" class="d">motor en memoria · un lote a la vez</text>
+  <text x="14" y="75" class="d">55 s máx. (504) · lo nuevo, en memoria</text>
 </g>
 
-<g id="actor-api-fuentes" transform="translate(14 262)">
-  <rect class="caja-externo" width="170" height="130" rx="10" fill="#EEF0F3" stroke="#5A6371" stroke-width="1.2"/>
-  <text x="14" y="18" class="s" fill="#5A6371">EXTERNO · PROVISTA</text>
-  <text x="14" y="38" class="t">API de fuentes</text>
-  <text x="14" y="55" class="d" fill="#5A6371">token personal</text>
-  <text x="14" y="80" class="d">mensajes</text><text x="156" y="80" text-anchor="end" class="m">2.028</text>
-  <text x="14" y="100" class="d">documentos</text><text x="156" y="100" text-anchor="end" class="m">26</text>
-  <text x="14" y="120" class="d">tablas (filas)</text><text x="156" y="120" text-anchor="end" class="m">6.243</text>
+<g id="jobmanager" transform="translate(506 148)">
+  <rect class="caja-proceso" width="300" height="92" rx="10" fill="#FFFFFF" stroke="#12161D" stroke-width="1.5"/>
+  <text x="14" y="21" class="t">JobManager · hilo monitor</text>
+  <text x="14" y="39" class="s">lanza python -m anon.cli run</text>
+  <text x="14" y="58" class="d">relanza hasta 2 veces, desde cero,</text>
+  <text x="14" y="75" class="d">mismo job_id · watchdog 115 min</text>
 </g>
 
-<!-- ===================== JOB · PROCESO SEPARADO (marco del pipeline) ===================== -->
-<g id="job" transform="translate(212 218)">
-  <rect class="caja-job" width="1052" height="544" rx="10" fill="#F6F7F9" stroke="#5A6371" stroke-dasharray="5 4"/>
-  <text x="14" y="22" class="t">Job · proceso separado</text>
-  <text x="14" y="39" class="d" fill="#5A6371">/health y /run/{id} siempre responden</text>
-  <text x="308" y="22" class="d">si el proceso muere se relanza · watchdog &lt; 2 h · salida con cambio atómico</text>
-  <text x="308" y="39" class="s" fill="#5A6371">POST /run idempotente · estado, progreso y costo en jobs/&lt;job&gt;.json</text>
-  <path d="M0 50H1052" stroke="#D9DDE4" fill="none"/>
+<g id="lecturas-http" class="s" fill="#1F3FBF">
+  <text x="1140" y="170" text-anchor="end">GET /run/{job_id} → jobs/</text>
+  <text x="1140" y="186" text-anchor="end">GET /output y /entities</text>
+  <text x="1140" y="202" text-anchor="end">→ output/CURRENT</text>
 </g>
 
-<!-- ===================== PIPELINE 1-3 (código) ===================== -->
-<g id="etapa-1" transform="translate(226 284)">
-  <rect class="caja-codigo" width="220" height="108" rx="8" fill="#FFFFFF" stroke="#0E7C66" stroke-width="1.5"/>
-  <text x="14" y="23" class="t"><tspan fill="#0E7C66">1</tspan> · Ingesta</text>
-  <text x="14" y="45" class="d">+ huella de esquema y diff de</text>
-  <text x="14" y="62" class="d">record_index frente a la</text>
-  <text x="14" y="79" class="d">corrida anterior</text>
+<!-- ===================== PROCESO cli run (pipeline) ===================== -->
+<g id="cli-run" transform="translate(222 262)">
+  <rect class="caja-job" width="898" height="460" rx="10" fill="#F6F7F9" stroke="#5A6371" stroke-dasharray="5 4"/>
+  <text x="14" y="22" class="t">cli run · proceso separado</text>
+  <text x="884" y="22" text-anchor="end" class="s" fill="#5A6371">python -m anon.cli run · estado → jobs/&lt;job&gt;.json</text>
 </g>
 
-<g id="etapa-2" transform="translate(226 412)">
-  <rect class="caja-codigo" width="220" height="114" rx="8" fill="#FFFFFF" stroke="#0E7C66" stroke-width="1.5"/>
-  <text x="14" y="23" class="t"><tspan fill="#0E7C66">2</tspan> · Normalización</text>
-  <text x="14" y="45" class="d">por fuente: chats, tablas y</text>
-  <text x="14" y="62" class="d">documentos (texto, metadatos</text>
-  <text x="14" y="79" class="d">PDF, comentarios HTML y</text>
-  <text x="14" y="96" class="d">menciones Slack)</text>
+<g id="etapa-1-ingesta" transform="translate(236 310)">
+  <rect class="caja-codigo" width="160" height="104" rx="8" fill="#FFFFFF" stroke="#0E7C66" stroke-width="1.5"/>
+  <text x="12" y="22" class="t13"><tspan fill="#0E7C66">1</tspan> · Ingesta</text>
+  <text x="12" y="42" class="d">escribe raw/&lt;ts&gt;/</text>
+  <text x="12" y="58" class="d">500/min, reintentos</text>
+  <text x="12" y="74" class="d">record_index cambió:</text>
+  <text x="12" y="90" class="d">descarga otra vez</text>
+</g>
+<g id="etapa-2-normalizacion" transform="translate(412 310)">
+  <rect class="caja-codigo" width="150" height="104" rx="8" fill="#FFFFFF" stroke="#0E7C66" stroke-width="1.5"/>
+  <text x="12" y="22" class="t13"><tspan fill="#0E7C66">2</tspan> · Normalización</text>
+  <text x="12" y="42" class="d">lee raw/&lt;ts&gt;/</text>
+  <text x="12" y="58" class="d">registro por id;</text>
+  <text x="12" y="74" class="d">concilia ids con</text>
+  <text x="12" y="90" class="d">record_index</text>
+</g>
+<g id="etapa-3-registro" transform="translate(578 310)">
+  <rect class="caja-codigo" width="150" height="104" rx="8" fill="#FFFFFF" stroke="#0E7C66" stroke-width="1.5"/>
+  <text x="12" y="22" class="t13"><tspan fill="#0E7C66">3</tspan> · Registro</text>
+  <text x="12" y="42" class="d">anclado en llaves</text>
+  <text x="12" y="58" class="d">cl:/kp: de tablas;</text>
+  <text x="12" y="74" class="d">fusiona solo con</text>
+  <text x="12" y="90" class="d">identificador duro</text>
+</g>
+<g id="etapa-4a-reglas" transform="translate(744 310)">
+  <rect class="caja-codigo" width="200" height="104" rx="8" fill="#E8F4F1" stroke="#0E7C66" stroke-width="2"/>
+  <text x="12" y="22" class="t13" fill="#0E7C66">4a · Detección por reglas</text>
+  <text x="12" y="42" class="d">cédula, teléfono, cuenta,</text>
+  <text x="12" y="58" class="d">correo «arroba», placa,</text>
+  <text x="12" y="74" class="d">pasaporte, @usuario</text>
+  <text x="12" y="90" class="d">+ nombres del registro</text>
+</g>
+<g id="etapa-4b-ia" transform="translate(960 310)">
+  <rect class="caja-ia" width="146" height="104" rx="8" fill="#FDF0E8" stroke="#C2410C" stroke-width="2" stroke-dasharray="7 4"/>
+  <text x="12" y="22" class="t13" fill="#C2410C">4b · IA</text>
+  <text x="12" y="40" class="s" fill="#C2410C">SIGUIENTE PASO</text>
+  <text x="12" y="58" class="d">solo el residuo</text>
+  <text x="12" y="74" class="d">ambiguo, con caché</text>
+  <text x="12" y="90" class="d">y fail-closed</text>
 </g>
 
-<g id="etapa-3" transform="translate(226 552)">
-  <rect class="caja-codigo" width="220" height="84" rx="8" fill="#FFFFFF" stroke="#0E7C66" stroke-width="1.5"/>
-  <text x="14" y="23" class="t"><tspan fill="#0E7C66">3</tspan> · Bóveda de identidades</text>
-  <text x="14" y="45" class="d">tablas primero: persona_id +</text>
-  <text x="14" y="62" class="d">todas sus formas de superficie</text>
-  <g id="badge-d4"><rect x="184" y="-9" width="28" height="18" rx="4" fill="#F5D565"/><text x="198" y="4" text-anchor="middle" class="b">D4</text></g>
+<g id="etapa-5-vinculacion" transform="translate(236 452)">
+  <rect class="caja-codigo" width="240" height="132" rx="8" fill="#FFFFFF" stroke="#0E7C66" stroke-width="1.5"/>
+  <text x="12" y="22" class="t13"><tspan fill="#0E7C66">5</tspan> · Vinculación</text>
+  <text x="12" y="42" class="d">elige: autor → dueño → hilo</text>
+  <text x="12" y="58" class="d">→ evidencia dura (correo,</text>
+  <text x="12" y="74" class="d">cédula, teléfono, llaves)</text>
+  <text x="12" y="90" class="d">si no: orden fijo + aviso</text>
+  <text x="12" y="110" class="s en-curso" fill="#5A6371">en curso: prior por tipo y</text>
+  <text x="12" y="124" class="s en-curso" fill="#5A6371">reglas de vínculo</text>
+</g>
+<g id="etapa-6-seudonimos" transform="translate(492 452)">
+  <rect class="caja-codigo" width="190" height="132" rx="8" fill="#FFFFFF" stroke="#0E7C66" stroke-width="1.5"/>
+  <text x="12" y="22" class="t13"><tspan fill="#0E7C66">6</tspan> · Seudónimos</text>
+  <text x="12" y="42" class="d">flujo HMAC por persona;</text>
+  <text x="12" y="58" class="d">mapa en state.json;</text>
+  <text x="12" y="74" class="d">gana el valor ya</text>
+  <text x="12" y="90" class="d">publicado</text>
+</g>
+<g id="etapa-7-cuasi-id" transform="translate(698 452)">
+  <rect class="caja-codigo" width="220" height="132" rx="8" fill="#FFFFFF" stroke="#0E7C66" stroke-width="1.5"/>
+  <text x="12" y="22" class="t13"><tspan fill="#0E7C66">7</tspan> · Cuasi-id</text>
+  <text x="12" y="42" class="d">siempre, en tabla y texto:</text>
+  <text x="12" y="58" class="d">ocupación → sector; barrio →</text>
+  <text x="12" y="74" class="d">otro de la ciudad o ciudad;</text>
+  <text x="12" y="90" class="d">año → «hace unos años»</text>
+  <text x="12" y="110" class="s en-curso" fill="#5A6371">en curso: contra la fila</text>
+  <text x="12" y="124" class="s en-curso" fill="#5A6371">del maestro</text>
+</g>
+<g id="etapa-8-reemplazo" transform="translate(934 452)">
+  <rect class="caja-codigo" width="172" height="132" rx="8" fill="#FFFFFF" stroke="#0E7C66" stroke-width="1.5"/>
+  <text x="12" y="22" class="t13"><tspan fill="#0E7C66">8</tspan> · Reemplazo</text>
+  <text x="12" y="42" class="d">solo los fragmentos;</text>
+  <text x="12" y="58" class="d">el texto nunca se</text>
+  <text x="12" y="74" class="d">reescribe</text>
 </g>
 
-<!-- ===================== 4 · BIFURCACIÓN ===================== -->
-<g id="etapa-4-bifurcacion" transform="translate(494 594)">
-  <path d="M0 -22L22 0L0 22L-22 0Z" fill="#12161D"/>
-  <text x="0" y="5" text-anchor="middle" class="t" fill="#FFFFFF">4</text>
-  <text x="0" y="41" text-anchor="middle" class="b" fill="#12161D">DETECCIÓN</text>
+<g id="etapa-9-autoverificacion" transform="translate(856 616)">
+  <rect class="caja-control" width="250" height="100" rx="8" fill="#FCEDEC" stroke="#B42318" stroke-width="2"/>
+  <text x="12" y="22" class="t13" fill="#B42318">9 · Autoverificación</text>
+  <text x="12" y="42" class="d">criterio del validador sobre</text>
+  <text x="12" y="58" class="d">toda la salida; fugas y avisos</text>
+  <text x="12" y="74" class="d">→ report.json; el original que</text>
+  <text x="12" y="90" class="d">escapa no va en entities.json</text>
+</g>
+<g id="publicacion" transform="translate(556 616)">
+  <rect class="caja-salida" width="280" height="100" rx="8" fill="#FFFFFF" stroke="#12161D" stroke-width="2"/>
+  <text x="12" y="22" class="t13">Publicación atómica</text>
+  <text x="12" y="42" class="d">escribe en output/&lt;job&gt;.&lt;n&gt;.tmp,</text>
+  <text x="12" y="58" class="d">renombra a output/&lt;job&gt;/ y</text>
+  <text x="12" y="74" class="d">después mueve CURRENT</text>
+  <text x="12" y="90" class="d" fill="#5A6371">siempre publica; no hay compuerta</text>
 </g>
 
-<g id="etapa-4a-codigo" transform="translate(566 284)">
-  <rect class="caja-codigo" width="246" height="282" rx="10" fill="#E8F4F1" stroke="#0E7C66" stroke-width="2"/>
-  <text x="16" y="24" class="t15" fill="#0E7C66">4a · Rama de código</text>
-  <text x="16" y="42" class="d" fill="#5A6371">la mayor parte del volumen</text>
-  <text x="16" y="66" class="dm">Reglas + validadores</text>
-  <text x="16" y="84" class="d">cédula · NIT con DV</text>
-  <text x="16" y="101" class="d">teléfonos +57 · placas</text>
-  <text x="16" y="118" class="d">pasaportes · tarjetas (Luhn)</text>
-  <text x="16" y="135" class="d">correos, incl. «arroba/punto»</text>
-  <text x="16" y="152" class="d">menciones Slack</text>
-  <text x="16" y="176" class="dm">Búsqueda en la bóveda</text>
-  <text x="16" y="194" class="d">sin tildes ni mayúsculas,</text>
-  <text x="16" y="211" class="d">con variantes del nombre</text>
-  <g id="lee-boveda">
-    <rect class="caja-almacen" x="16" y="226" width="214" height="38" rx="6" fill="#FFFFFF" stroke="#3B5B8C"/>
-    <text x="26" y="241" class="s" fill="#3B5B8C">lee: bóveda de identidades</text>
-    <text x="26" y="256" class="s" fill="#3B5B8C">(state.json)</text>
+<!-- ===================== VOLUMEN /data ===================== -->
+<g id="volumen-data" transform="translate(222 744)">
+  <rect class="caja-almacen" width="898" height="140" rx="10" fill="#EBF0F7" stroke="#3B5B8C" stroke-width="1.5"/>
+  <text x="14" y="22" class="t" fill="#3B5B8C">Volumen /data · disco persistente</text>
+  <text x="884" y="22" text-anchor="end" class="s" fill="#3B5B8C">escrituras atómicas: temporal + os.replace</text>
+  <g id="data-raw">
+    <rect x="14" y="32" width="96" height="24" rx="5" fill="#FFFFFF" stroke="#3B5B8C"/><text x="22" y="48" class="s" fill="#3B5B8C">raw/&lt;ts&gt;/</text>
+    <text x="14" y="76" class="d">fuentes crudas por corrida;</text>
+    <text x="14" y="92" class="d">escribe Ingesta, lee</text>
+    <text x="14" y="108" class="d">Normalización</text>
+  </g>
+  <g id="data-state">
+    <rect x="238" y="32" width="156" height="24" rx="5" fill="#FFFFFF" stroke="#3B5B8C"/><text x="246" y="48" class="s" fill="#3B5B8C">state.json + history/</text>
+    <text x="238" y="76" class="d">registro, seudónimos e ids;</text>
+    <text x="238" y="92" class="d">escritura atómica + copia</text>
+    <text x="238" y="108" class="d">por corrida en history/</text>
+  </g>
+  <g id="data-output">
+    <rect x="462" y="32" width="170" height="24" rx="5" fill="#FFFFFF" stroke="#3B5B8C"/><text x="470" y="48" class="s" fill="#3B5B8C">output/&lt;job&gt;/ + CURRENT</text>
+    <text x="462" y="76" class="d">4 archivos + report.json;</text>
+    <text x="462" y="92" class="d">CURRENT apunta a la última</text>
+    <text x="462" y="108" class="d">corrida terminada</text>
+  </g>
+  <g id="data-jobs">
+    <rect x="686" y="32" width="124" height="24" rx="5" fill="#FFFFFF" stroke="#3B5B8C"/><text x="694" y="48" class="s" fill="#3B5B8C">jobs/&lt;job&gt;.json</text>
+    <text x="686" y="76" class="d">estado, progreso, costo e</text>
+    <text x="686" y="92" class="d">historial (JobManager y</text>
+    <text x="686" y="108" class="d">cli run)</text>
   </g>
 </g>
 
-<g id="etapa-4b-ia" transform="translate(566 616)">
-  <rect class="caja-ia" width="246" height="126" rx="10" fill="#FDF0E8" stroke="#C2410C" stroke-width="2" stroke-dasharray="7 4"/>
-  <text x="16" y="24" class="t15" fill="#C2410C">4b · Rama de IA</text>
-  <text x="16" y="42" class="s" fill="#C2410C">SIGUIENTE PASO · AÚN NO ACTIVA</text>
-  <text x="16" y="63" class="d">solo el residuo ambiguo: un LLM</text>
-  <text x="16" y="80" class="d">clasifica persona, organización,</text>
-  <text x="16" y="97" class="d">lugar o figura pública + género</text>
-  <text x="16" y="114" class="d">con caché y fail-closed</text>
-  <g id="badge-d2"><rect x="210" y="-9" width="28" height="18" rx="4" fill="#F5D565"/><text x="224" y="4" text-anchor="middle" class="b">D2</text></g>
+<!-- ===================== FLECHAS (coordenadas absolutas) ===================== -->
+<g id="flechas" fill="none">
+  <path id="f-evaluador-http" d="M178 96H200" stroke="#5A6371" stroke-width="1.6" marker-start="url(#ah-mut)" marker-end="url(#ah-mut)"/>
+  <path id="f-vigia-api" d="M95 448V422" stroke="#5A6371" stroke-width="1.6" marker-end="url(#ah-mut)"/>
+  <path id="f-api-ingesta" d="M178 352H232" stroke="#12161D" stroke-width="1.6" marker-start="url(#ah)" marker-end="url(#ah)"/>
+  <path id="f-run-jobmanager" d="M639 108V144" stroke="#12161D" stroke-width="1.4" marker-end="url(#ah)"/>
+  <path id="f-anonymize-vivo" d="M289 108V144" stroke="#1F3FBF" stroke-width="1.6" marker-end="url(#ah-acc)"/>
+  <path id="f-jobmanager-cli" d="M656 240V258" stroke="#12161D" stroke-width="1.4" marker-end="url(#ah)"/>
+  <path id="f-1-2" d="M396 362H408" stroke="#12161D" stroke-width="1.6" marker-end="url(#ah)"/>
+  <path id="f-2-3" d="M562 362H574" stroke="#12161D" stroke-width="1.6" marker-end="url(#ah)"/>
+  <path id="f-3-4a" d="M728 362H740" stroke="#12161D" stroke-width="1.6" marker-end="url(#ah)"/>
+  <path id="f-4a-4b" d="M944 362H956" stroke="#C2410C" stroke-width="1.6" stroke-dasharray="3 2" marker-end="url(#ah-ai)"/>
+  <path id="f-4a-5" d="M844 414V433H356V448" stroke="#12161D" stroke-width="1.6" marker-end="url(#ah)"/>
+  <path id="f-5-6" d="M476 518H488" stroke="#12161D" stroke-width="1.6" marker-end="url(#ah)"/>
+  <path id="f-6-7" d="M682 518H694" stroke="#12161D" stroke-width="1.6" marker-end="url(#ah)"/>
+  <path id="f-7-8" d="M918 518H930" stroke="#12161D" stroke-width="1.6" marker-end="url(#ah)"/>
+  <path id="f-8-9" d="M1020 584V612" stroke="#12161D" stroke-width="1.6" marker-end="url(#ah)"/>
+  <path id="f-9-publicacion" d="M856 666H840" stroke="#12161D" stroke-width="1.6" marker-end="url(#ah)"/>
+  <path id="f-publicacion-output" d="M760 716V772" stroke="#0E7C66" stroke-width="2" marker-end="url(#ah-code)"/>
+  <path id="f-lecturas-http" d="M1120 812H1152V126" stroke="#1F3FBF" stroke-width="1.6" marker-end="url(#ah-acc)"/>
 </g>
 
-<!-- ===================== PIPELINE 5-8 (código) ===================== -->
-<g id="etapa-5" transform="translate(854 284)">
-  <rect class="caja-codigo" width="224" height="80" rx="8" fill="#FFFFFF" stroke="#0E7C66" stroke-width="1.5"/>
-  <text x="14" y="23" class="t"><tspan fill="#0E7C66">5</tspan> · Resolución de entidades</text>
-  <text x="14" y="45" class="d">mención → persona_id por</text>
-  <text x="14" y="62" class="d">evidencia; homónimos separados</text>
-</g>
+<!-- Ruta en vivo: /anonymize lee state.json (caché por mtime) -->
+<path id="ruta-en-vivo" d="M212 240V734H480V772" fill="none" stroke="#1F3FBF" stroke-width="2" stroke-dasharray="7 5" marker-end="url(#ah-acc)"/>
 
-<g id="etapa-6" transform="translate(854 390)">
-  <rect class="caja-codigo" width="224" height="96" rx="8" fill="#FFFFFF" stroke="#0E7C66" stroke-width="1.5"/>
-  <text x="14" y="23" class="t"><tspan fill="#0E7C66">6</tspan> · Seudónimos deterministas</text>
-  <text x="14" y="45" class="d">HMAC(persona_id) → misma</text>
-  <text x="14" y="62" class="d">categoría, género, formato</text>
-  <text x="14" y="79" class="d">y estilo</text>
-  <g id="badge-d3"><rect x="188" y="-9" width="28" height="18" rx="4" fill="#F5D565"/><text x="202" y="4" text-anchor="middle" class="b">D3</text></g>
-</g>
-
-<g id="etapa-7" transform="translate(854 512)">
-  <rect class="caja-codigo" width="224" height="96" rx="8" fill="#FFFFFF" stroke="#0E7C66" stroke-width="1.5"/>
-  <text x="14" y="23" class="t"><tspan fill="#0E7C66">7</tspan> · Cuasi-identificadores</text>
-  <text x="14" y="45" class="d">k-anonimato: generaliza</text>
-  <text x="14" y="62" class="d">combinaciones raras (k &lt; 5):</text>
-  <text x="14" y="79" class="d">barrio + ocupación + año</text>
-</g>
-
-<g id="etapa-8" transform="translate(854 634)">
-  <rect class="caja-codigo" width="224" height="80" rx="8" fill="#FFFFFF" stroke="#0E7C66" stroke-width="1.5"/>
-  <text x="14" y="23" class="t"><tspan fill="#0E7C66">8</tspan> · Reescritura</text>
-  <text x="14" y="45" class="d">por fragmentos; ids 1:1</text>
-  <text x="14" y="62" class="d">con la entrada</text>
-</g>
-
-<!-- 9 · Verificador de fugas: compuerta antes de publicar -->
-<g id="etapa-9-verificador" transform="translate(1106 590)">
-  <rect class="caja-control" width="144" height="150" rx="10" fill="#FCEDEC" stroke="#B42318" stroke-width="2.2"/>
-  <text x="12" y="23" class="t" fill="#B42318">9 · Verificador</text>
-  <text x="12" y="40" class="t" fill="#B42318">de fugas</text>
-  <text x="12" y="61" class="d">búsqueda inversa</text>
-  <text x="12" y="77" class="d">en la bóveda +</text>
-  <text x="12" y="93" class="d">re-escaneo final</text>
-  <text x="12" y="117" class="s" fill="#B42318">fuga → vuelve a 8</text>
-  <text x="12" y="135" class="s" fill="#0E7C66">limpio → publica</text>
-  <g id="badge-d5"><rect x="108" y="-9" width="28" height="18" rx="4" fill="#F5D565"/><text x="122" y="4" text-anchor="middle" class="b">D5</text></g>
-</g>
-
-<!-- ===================== SALIDA ===================== -->
-<g id="salida" transform="translate(1282 284)">
-  <rect class="caja-salida" width="192" height="456" rx="10" fill="#FFFFFF" stroke="#12161D" stroke-width="2"/>
-  <text x="14" y="24" class="t15">SALIDA · output/</text>
-  <g id="archivos-salida">
-    <rect x="14" y="36" width="164" height="26" rx="5" fill="#F6F7F9" stroke="#D9DDE4"/><text x="24" y="53.5" class="m">chats.jsonl</text>
-    <rect x="14" y="68" width="164" height="26" rx="5" fill="#F6F7F9" stroke="#D9DDE4"/><text x="24" y="85.5" class="m">docs.jsonl</text>
-    <rect x="14" y="100" width="164" height="26" rx="5" fill="#F6F7F9" stroke="#D9DDE4"/><text x="24" y="117.5" class="m">tables.jsonl</text>
-    <rect x="14" y="132" width="164" height="26" rx="5" fill="#F6F7F9" stroke="#D9DDE4"/><text x="24" y="149.5" class="m">entities.json</text>
-  </g>
-  <text x="14" y="186" class="dm">Listo para entrenar,</text>
-  <text x="14" y="203" class="dm">sin exponer a nadie</text>
-  <text x="14" y="229" class="d" fill="#5A6371">mismos ids que la entrada</text>
-  <text x="14" y="253" class="d" fill="#5A6371">misma persona → mismo</text>
-  <text x="14" y="269" class="d" fill="#5A6371">seudónimo en todas las</text>
-  <text x="14" y="285" class="d" fill="#5A6371">fuentes; homónimos →</text>
-  <text x="14" y="301" class="d" fill="#5A6371">seudónimos distintos</text>
-  <text x="14" y="325" class="d" fill="#5A6371">se preservan empresas,</text>
-  <text x="14" y="341" class="d" fill="#5A6371">lugares, marcas y</text>
-  <text x="14" y="357" class="d" fill="#5A6371">figuras públicas</text>
-  <text x="14" y="412" class="s" fill="#0E7C66">entra solo lo que</text>
-  <text x="14" y="428" class="s" fill="#0E7C66">pasa la compuerta 9</text>
-</g>
-
-<!-- ===================== LLM EXTERNO (siguiente paso) ===================== -->
-<g id="actor-openrouter" transform="translate(610 826)">
-  <rect class="caja-externo" width="202" height="64" rx="10" fill="#EEF0F3" stroke="#5A6371" stroke-width="1.2" stroke-dasharray="5 4"/>
-  <text x="14" y="17" class="s" fill="#5A6371">EXTERNO · SIGUIENTE PASO</text>
-  <text x="14" y="36" class="t">OpenRouter</text>
-  <text x="14" y="53" class="d" fill="#5A6371">LLM pequeño · salida JSON</text>
-</g>
-
-<!-- ===================== DISCO PERSISTENTE (volumen /data) ===================== -->
-<g id="disco-persistente" transform="translate(198 900)">
-  <rect class="caja-almacen" width="1066" height="120" rx="10" fill="#EBF0F7" stroke="#3B5B8C" stroke-width="1.5"/>
-  <text x="16" y="23" class="t" fill="#3B5B8C">Disco persistente · volumen /data</text>
-  <text x="1050" y="23" text-anchor="end" class="s" fill="#3B5B8C">escrituras atómicas: temporal + renombrar</text>
-  <g id="archivo-state">
-    <rect x="16" y="34" width="96" height="24" rx="5" fill="#FFFFFF" stroke="#3B5B8C"/>
-    <text x="24" y="50" class="s" fill="#3B5B8C">state.json</text>
-    <text x="16" y="80" class="d">registro de personas (bóveda), mapa</text>
-    <text x="16" y="98" class="d">de seudónimos e ids de entidad</text>
-  </g>
-  <g id="archivo-output">
-    <rect x="366" y="34" width="190" height="24" rx="5" fill="#FFFFFF" stroke="#3B5B8C"/>
-    <text x="374" y="50" class="s" fill="#3B5B8C">output/&lt;job&gt;/ + CURRENT</text>
-    <text x="366" y="80" class="d">una carpeta por corrida; el puntero</text>
-    <text x="366" y="98" class="d">CURRENT cambia de forma atómica</text>
-  </g>
-  <g id="archivo-jobs">
-    <rect x="716" y="34" width="132" height="24" rx="5" fill="#FFFFFF" stroke="#3B5B8C"/>
-    <text x="724" y="50" class="s" fill="#3B5B8C">jobs/&lt;job&gt;.json</text>
-    <text x="716" y="80" class="d">estado, progreso y costo de cada job;</text>
-    <text x="716" y="98" class="d">lo que devuelve GET /run/{job_id}</text>
-  </g>
-</g>
-
-<!-- Nota de escala: cómo crece el almacenamiento (detalle en la sección «Cómo escala» de la página) -->
-<g id="nota-escala" transform="translate(14 900)">
-  <rect class="caja-almacen" width="162" height="120" rx="10" fill="#FFFFFF" stroke="#3B5B8C" stroke-width="1.2" stroke-dasharray="5 4"/>
-  <text x="12" y="19" class="s" fill="#3B5B8C">ESCALA →</text>
-  <text x="12" y="40" class="d">PostgreSQL: registro</text>
-  <text x="12" y="57" class="d">S3/R2: salidas</text>
-  <text x="12" y="74" class="d">cola de jobs</text>
-  <text x="12" y="91" class="d">pool LLM con caché</text>
-  <text x="12" y="110" class="d" fill="#5A6371">mismos seudónimos</text>
-</g>
-
-<!-- ===================== RESILIENCIA PROACTIVA (incidente: las fuentes crecen) ===================== -->
-<g id="resiliencia" transform="translate(14 418)">
-  <rect class="caja-control" width="170" height="318" rx="10" fill="#FFFFFF" stroke="#B42318" stroke-width="1.5"/>
-  <text x="12" y="23" class="t" fill="#B42318">Resiliencia proactiva</text>
-  <g class="d">
-    <text x="12" y="46" font-weight="600" fill="#B42318">1.</text><text x="26" y="46">Las fuentes crecen:</text><text x="26" y="62">misma API y esquema,</text><text x="26" y="78">solo más registros.</text>
-    <text x="12" y="102" font-weight="600" fill="#B42318">2.</text><text x="26" y="102">Un vigilante compara</text><text x="26" y="118">record_index y avisa.</text>
-    <text x="12" y="142" font-weight="600" fill="#B42318">3.</text><text x="26" y="142">Toda persona ya</text><text x="26" y="158">publicada conserva</text><text x="26" y="174">su seudónimo</text><text x="26" y="190">(state.json + HMAC).</text>
-    <text x="12" y="214" font-weight="600" fill="#B42318">4.</text><text x="26" y="214">Lo desconocido se</text><text x="26" y="230">trata como sensible</text><text x="26" y="246">(fail-closed).</text>
-    <text x="12" y="270" font-weight="600" fill="#B42318">5.</text><text x="26" y="270">Si cambia el</text><text x="26" y="286">esquema, la huella</text><text x="26" y="302">lo detecta antes.</text>
-  </g>
-</g>
-
-<!-- ===================== LEYENDA ===================== -->
-<g id="leyenda" transform="translate(1282 790)">
-  <rect width="206" height="236" rx="10" fill="#FFFFFF" stroke="#D9DDE4"/>
-  <text x="14" y="22" class="t">Leyenda</text>
-  <rect x="15" y="36" width="12" height="12" fill="#0E7C66"/><text x="36" y="46" class="d">Código determinista</text>
-  <path d="M21 56.5L28.5 64L21 71.5L13.5 64Z" fill="#C2410C"/><text x="36" y="68" class="d">IA · siguiente paso</text>
-  <rect x="15.75" y="80.75" width="10.5" height="10.5" fill="none" stroke="#3B5B8C" stroke-width="2"/><text x="36" y="90" class="d">Almacenamiento</text>
-  <circle cx="21" cy="108" r="6.5" fill="#B42318"/><text x="36" y="112" class="d">Control y fugas</text>
-  <rect x="14" y="123" width="14" height="14" rx="3" fill="#EEF0F3" stroke="#5A6371" stroke-width="1.2"/><text x="36" y="134" class="d">Actor externo</text>
-  <path d="M13 152H28" stroke="#12161D" stroke-width="1.6" fill="none" marker-end="url(#ah)"/><text x="36" y="156" class="d">Flujo de datos</text>
-  <path d="M13 174H29" stroke="#1F3FBF" stroke-width="2" stroke-dasharray="4 3" fill="none"/><text x="36" y="178" class="d">Ruta en vivo /anonymize</text>
-  <path d="M13 196H29" stroke="#3B5B8C" stroke-width="1.4" stroke-dasharray="3 3" fill="none"/><text x="36" y="200" class="d">Lee / escribe en disco</text>
-  <rect x="12" y="211" width="20" height="14" rx="3" fill="#F5D565"/><text x="36" y="222" class="d">Dn · decisión anotada</text>
-</g>
-
-<!-- ===================== DECISIONES (D1-D5) ===================== -->
-<g id="decisiones">
-  <g id="decision-d1" class="nota-decision" transform="translate(14 1040)">
-    <rect width="285" height="136" rx="8" fill="#FFFBEB" stroke="#E3C04D"/>
-    <rect x="12" y="10" width="28" height="18" rx="4" fill="#F5D565"/><text x="26" y="23" text-anchor="middle" class="b">D1</text>
-    <text x="48" y="24" class="t13">Contenedor + disco persistente</text>
-    <text x="12" y="48" class="d"><tspan font-weight="600" fill="#0E7C66">Elegimos</tspan> contenedor siempre encendido</text>
-    <text x="12" y="65" class="d">(Railway) + disco persistente</text>
-    <text x="12" y="88" class="d"><tspan font-weight="600" fill="#B42318">Descartamos</tspan> laptop con túnel (una</text>
-    <text x="12" y="105" class="d">caída en el debrief mata la corrida</text>
-    <text x="12" y="122" class="d">del set oculto) y funciones serverless</text>
-  </g>
-  <g id="decision-d2" class="nota-decision" transform="translate(311 1040)">
-    <rect width="285" height="136" rx="8" fill="#FFFBEB" stroke="#E3C04D"/>
-    <rect x="12" y="10" width="28" height="18" rx="4" fill="#F5D565"/><text x="26" y="23" text-anchor="middle" class="b">D2</text>
-    <text x="48" y="24" class="t13">Reglas primero, LLM después</text>
-    <text x="12" y="48" class="d"><tspan font-weight="600" fill="#0E7C66">Elegimos</tspan> v1 solo con reglas; el LLM</text>
-    <text x="12" y="65" class="d">entra luego, solo para lo ambiguo</text>
-    <text x="12" y="88" class="d"><tspan font-weight="600" fill="#B42318">Descartamos</tspan> todo-LLM: costo (el servicio</text>
-    <text x="12" y="105" class="d">paga sus llamadas; reserva de US$5) y</text>
-    <text x="12" y="122" class="d">resultados no deterministas</text>
-  </g>
-  <g id="decision-d3" class="nota-decision" transform="translate(608 1040)">
-    <rect width="285" height="136" rx="8" fill="#FFFBEB" stroke="#E3C04D"/>
-    <rect x="12" y="10" width="28" height="18" rx="4" fill="#F5D565"/><text x="26" y="23" text-anchor="middle" class="b">D3</text>
-    <text x="48" y="24" class="t13">Seudónimos deterministas</text>
-    <text x="12" y="48" class="d"><tspan font-weight="600" fill="#0E7C66">Elegimos</tspan> HMAC(persona_id): la misma</text>
-    <text x="12" y="65" class="d">persona recibe siempre el mismo seudónimo</text>
-    <text x="12" y="88" class="d"><tspan font-weight="600" fill="#B42318">Descartamos</tspan> aleatorios o marcadores</text>
-    <text x="12" y="105" class="d">[NOMBRE]: rompen la consistencia y</text>
-    <text x="12" y="122" class="d">la utilidad para entrenar</text>
-  </g>
-  <g id="decision-d4" class="nota-decision" transform="translate(905 1040)">
-    <rect width="285" height="136" rx="8" fill="#FFFBEB" stroke="#E3C04D"/>
-    <rect x="12" y="10" width="28" height="18" rx="4" fill="#F5D565"/><text x="26" y="23" text-anchor="middle" class="b">D4</text>
-    <text x="48" y="24" class="t13">Tablas como ancla de identidad</text>
-    <text x="12" y="48" class="d"><tspan font-weight="600" fill="#0E7C66">Elegimos</tspan> anclar cada persona en las</text>
-    <text x="12" y="65" class="d">tablas con un persona_id</text>
-    <text x="12" y="88" class="d"><tspan font-weight="600" fill="#B42318">Descartamos</tspan> agrupar por nombre: dos</text>
-    <text x="12" y="105" class="d">clientes homónimos se fundirían en</text>
-    <text x="12" y="122" class="d">una sola persona</text>
-  </g>
-  <g id="decision-d5" class="nota-decision" transform="translate(1202 1040)">
-    <rect width="285" height="136" rx="8" fill="#FFFBEB" stroke="#E3C04D"/>
-    <rect x="12" y="10" width="28" height="18" rx="4" fill="#F5D565"/><text x="26" y="23" text-anchor="middle" class="b">D5</text>
-    <text x="48" y="24" class="t13">Fail-closed</text>
-    <text x="12" y="48" class="d"><tspan font-weight="600" fill="#0E7C66">Elegimos</tspan> tratar lo desconocido como</text>
-    <text x="12" y="65" class="d">sensible hasta clasificarlo</text>
-    <text x="12" y="88" class="d"><tspan font-weight="600" fill="#B42318">Descartamos</tspan> dejar pasar lo desconocido:</text>
-    <text x="12" y="105" class="d">la fuga pesa 45 de 100 en la nota;</text>
-    <text x="12" y="122" class="d">la utilidad, 35</text>
-  </g>
-</g>
-
-<!-- ===================== FLECHAS DE FLUJO (coordenadas absolutas) ===================== -->
-<g id="flechas-flujo" fill="none">
-  <path id="f-evaluador-http" d="M186 150H210" stroke="#5A6371" stroke-width="1.6" marker-start="url(#ah-mut)" marker-end="url(#ah-mut)"/>
-  <path id="f-api-1" d="M186 320H224" stroke="#12161D" stroke-width="1.6" marker-end="url(#ah)"/>
-  <path id="f-run-job" d="M785 162V214" stroke="#12161D" stroke-width="1.4" marker-end="url(#ah)"/>
-  <path id="f-job-estado" d="M946 216V166" stroke="#12161D" stroke-width="1.4" marker-end="url(#ah)"/>
-  <path id="f-1-2" d="M336 392V408" stroke="#12161D" stroke-width="1.6" marker-end="url(#ah)"/>
-  <path id="f-2-3" d="M336 526V548" stroke="#12161D" stroke-width="1.6" marker-end="url(#ah)"/>
-  <path id="f-3-4" d="M446 594H470" stroke="#12161D" stroke-width="1.6" marker-end="url(#ah)"/>
-  <path id="f-4-4a" d="M516 594C536 594 528 520 548 520" stroke="#0E7C66" stroke-width="6" marker-end="url(#ah-code-lg)"/>
-  <path id="f-4-4b" d="M516 594C538 594 540 672 562 672" stroke="#C2410C" stroke-width="2" stroke-dasharray="5 4" marker-end="url(#ah-ai)"/>
-  <path id="f-4a-5" d="M812 304H836" stroke="#0E7C66" stroke-width="6" marker-end="url(#ah-code-lg)"/>
-  <path id="f-4b-5" d="M812 679H828V340H850" stroke="#C2410C" stroke-width="2" stroke-dasharray="5 4" marker-end="url(#ah-ai)"/>
-  <path id="f-4b-openrouter" d="M711 745V823" stroke="#C2410C" stroke-width="1.6" stroke-dasharray="5 4" marker-start="url(#ah-ai)" marker-end="url(#ah-ai)"/>
-  <path id="f-5-6" d="M966 364V386" stroke="#12161D" stroke-width="1.6" marker-end="url(#ah)"/>
-  <path id="f-6-7" d="M966 486V508" stroke="#12161D" stroke-width="1.6" marker-end="url(#ah)"/>
-  <path id="f-7-8" d="M966 608V630" stroke="#12161D" stroke-width="1.6" marker-end="url(#ah)"/>
-  <path id="f-8-9" d="M1078 690H1102" stroke="#12161D" stroke-width="1.6" marker-end="url(#ah)"/>
-  <path id="f-9-8-fuga" d="M1106 652H1082" stroke="#B42318" stroke-width="1.8" stroke-dasharray="4 3" marker-end="url(#ah-dan)"/>
-  <path id="f-9-salida" d="M1250 700H1278" stroke="#0E7C66" stroke-width="2" marker-end="url(#ah-code)"/>
-  <path id="f-salida-output" d="M1378 282V166" stroke="#1F3FBF" stroke-width="1.6" marker-end="url(#ah-acc)"/>
-  <path id="f-salida-entities" d="M1300 282V198H1175V166" stroke="#1F3FBF" stroke-width="1.6" marker-end="url(#ah-acc)"/>
-</g>
-
-<!-- Ruta en vivo: POST /anonymize entra en 2 y salta a 4 (reusa la bóveda de la última corrida) -->
-<g id="ruta-en-vivo" fill="none" stroke="#1F3FBF" stroke-width="2" stroke-dasharray="7 5">
-  <path d="M494 162V450H450" marker-end="url(#ah-acc)"/>
-  <path d="M448 505H494V568" marker-end="url(#ah-acc)"/>
-</g>
-
-<!-- Bucle de aprendizaje (siguiente paso, aún no activo): decisiones de la IA → reglas como datos -->
-<g id="bucle-aprendizaje">
-  <path d="M760 614V569" stroke="#C2410C" stroke-width="2" stroke-dasharray="5 4" fill="none" marker-end="url(#ah-ai)"/>
-  <text x="750" y="586" text-anchor="end" class="d" fill="#C2410C">luego aprende: decisiones →</text>
-  <text x="750" y="603" text-anchor="end" class="dm" fill="#C2410C">reglas (datos)</text>
-</g>
-
-<!-- Asociación resiliencia ↔ huella de esquema (etapa 1) -->
-<path id="a-escala-disco" d="M176 960H198" stroke="#3B5B8C" stroke-width="1.4" stroke-dasharray="3 3" fill="none"/>
-<path id="a-resiliencia-1" d="M184 440H205V376H226" stroke="#B42318" stroke-width="1.4" stroke-dasharray="2 3" fill="none"/>
-
-<!-- Conectores al disco persistente: job (jobs/), 3 y 6 (state.json), 9 (output/ + CURRENT) -->
-<g id="conectores-disco">
-  <g stroke="#3B5B8C" stroke-width="1.4" stroke-dasharray="4 4" fill="none">
-    <path d="M220 762V900"/><path d="M336 636V900"/><path d="M854 438H842V900"/><path d="M1178 740V900"/>
-  </g>
-  <g fill="#3B5B8C"><circle cx="220" cy="900" r="3"/><circle cx="336" cy="900" r="3"/><circle cx="842" cy="900" r="3"/><circle cx="1178" cy="900" r="3"/></g>
+<!-- Seudónimos ⇄ state.json: lee el anterior, escribe atómico, copia en history/ -->
+<g id="conectores-data">
+  <path d="M520 584V772" fill="none" stroke="#3B5B8C" stroke-width="1.6" stroke-dasharray="4 4" marker-start="url(#ah-store)" marker-end="url(#ah-store)"/>
   <g class="s" fill="#3B5B8C">
-    <text x="228" y="842">jobs/&lt;job&gt;.json</text>
-    <text x="344" y="868">state.json · registro</text>
-    <text x="850" y="842">state.json · seudónimos</text>
-    <text x="1170" y="870" text-anchor="end">output/&lt;job&gt;/ + CURRENT</text>
+    <text x="510" y="640" text-anchor="end">lee el anterior,</text>
+    <text x="510" y="655" text-anchor="end">escribe atómico y</text>
+    <text x="510" y="670" text-anchor="end">copia a history/</text>
   </g>
 </g>
 
 <!-- Etiquetas de flechas -->
-<g id="etiquetas" class="s">
-  <text x="504" y="197" fill="#1F3FBF">en vivo · lotes de 50 en &lt; 60 s</text>
-  <text x="504" y="211" fill="#1F3FBF">entra en 2, salta a 4, reusa la bóveda</text>
-  <text x="793" y="205" fill="#5A6371">202 {job_id}</text>
-  <text x="954" y="205" fill="#5A6371">estado</text>
-  <text x="719" y="797" fill="#B42318">si no responde:</text>
-  <text x="719" y="811" fill="#B42318">fail-closed</text>
+<g id="etiquetas" class="s" fill="#5A6371">
+  <text x="647" y="138">202 {job_id}</text>
+  <text x="664" y="254">lanza</text>
 </g>
 </svg>
 </div>
-<figcaption class="note">Un solo contenedor sirve los seis endpoints bajo /v1 y corre el pipeline en un proceso aparte; un volumen persistente (/data) guarda state.json con una instantánea por corrida, una carpeta de salida por corrida con su puntero CURRENT, el estado de cada job y la copia cruda de las fuentes. La Rama de IA, en trazo discontinuo, es el siguiente paso: hoy todo es código. Las etiquetas D1–D5 remiten a las decisiones de abajo.</figcaption>
+<figcaption class="note">Un solo contenedor sirve los seis endpoints bajo /v1 y corre el pipeline en un proceso aparte; un volumen persistente (/data) guarda state.json con una instantánea por corrida, una carpeta de salida por corrida con su puntero CURRENT, el estado de cada job y la copia cruda de las fuentes. La Rama de IA, en trazo discontinuo, es el siguiente paso: hoy todo es código. La autoverificación no detiene la publicación: lo que se escapa queda en report.json.</figcaption>
 </figure>
 </div>
 <div class="wrap">
@@ -457,7 +331,7 @@
     <li><span class="n">1</span><span><b>Ingesta.</b> Descarga chats, documentos y tablas bajo un límite propio de 500 peticiones/min, con reintentos ante 429 y 5xx, en una carpeta temporal que se mueve de forma atómica. Al final re-chequea <code>record_index</code> con ETag y, si las fuentes crecieron durante la descarga, descarga de nuevo.</span></li>
     <li><span class="n">2</span><span><b>Normalización.</b> Chats, documentos (md, html, pdf → markdown con su metadata) y tablas (CSV y XML) al esquema de salida; los ids se concilian con <code>record_index</code>.</span></li>
     <li><span class="n">3</span><span><b>Registro de personas.</b> Las tablas primero: clientes, empleados y perfiles de chat con sus identificadores duros. Un cliente migrado con id nuevo se une a uno existente solo si su cédula coincide con exactamente uno.</span></li>
-    <li><span class="n">4a</span><span><b>Rama de código.</b> Reglas para nombres conocidos y desconocidos, correos (también deletreados), celulares, cédulas, direcciones, fechas de nacimiento, placas, pasaportes, tarjetas, cuentas, menciones, handles y slugs; una lista de términos conservados. Hoy procesa todo el volumen.</span></li>
+    <li><span class="n">4a</span><span><b>Rama de código.</b> Reglas para nombres conocidos y desconocidos, correos (también deletreados), celulares, cédulas, direcciones, fechas de nacimiento, placas, pasaportes, cuentas, menciones, handles y slugs; una lista de términos conservados. Hoy procesa todo el volumen.</span></li>
     <li class="is-ia"><span class="n">4b</span><span><b>Rama de IA (siguiente paso, no construida).</b> Un modelo pequeño clasificaría solo el residuo ambiguo (persona, organización, lugar o figura pública, y el género), con caché y fail-closed; sus decisiones se guardarían como reglas.</span></li>
     <li><span class="n">5</span><span><b>Vinculación.</b> Cada mención → persona: autor, dueño del registro, participantes del hilo y evidencia dura (correo, cédula, celular, llave); si nada decide, regla determinista con advertencia. Prioridad y filtro por tipo de persona, pase de eliminación, evidencia ampliada y por línea, y desempates de homónimos <span class="tag en-curso">en curso</span>.</span></li>
     <li><span class="n">6</span><span><b>Seudónimos deterministas.</b> Cada valor sale de HMAC-SHA256(secreto, persona), con la categoría, el género y el formato del original; los valores reales de todos se reservan. El mapa vive en <code>state.json</code>, así quien ya estaba conserva su seudónimo cuando las fuentes crecen.</span></li>
