@@ -1,0 +1,571 @@
+/* ==========================================================================
+   tema.css · "el diff del corpus"
+   Tema compartido por /, /diseno/ y /arquitectura/.
+
+   Idea: el producto es un diff del corpus y su gesto es el tachado.
+   - Fondo de tinta (azul profundo), texto color papel; tema claro al imprimir.
+   - Martian Mono para títulos, etiquetas y código; Atkinson Hyperlegible
+     Next para párrafos y tablas.
+   - El color es significado y es el mismo en todas las páginas:
+       --code   rama de código, determinista       ■ cuadrado
+       --ia     rama de IA / LLM                    ◆ rombo
+       --store  almacenamiento (bóveda, PostgreSQL) □ cuadrado hueco
+       --leak   compuerta de fugas, fail-closed, PII original ● punto
+       --mark   seudónimos (resaltador)
+     La forma del marcador repite el color, para no depender solo de él.
+
+   Componentes (copiar el marcado; el texto puede tener cualquier largo):
+     Rol semántico ........ clase code | ai | store | danger en el elemento
+     Etiqueta ............. <span class="tag code">código</span>
+     Marcador sin color ... <b class="mk code">Texto</b>   (solo pinta el ■ ◆ □ ●)
+     Pista (pipeline) ..... <ol class="track"><li class="st"><span class="st-k">Etiqueta</span>
+                            <b>Título</b><small>detalle</small></li>…</ol>
+                            li.st.st-wide = más ancha; ramas: <div class="lane code|ai">…</div>
+                            signo opcional en la etiqueta: <span class="sg del|add">−|+</span>
+     Listado con canal .... <ol class="listing"><li>…</li></ol>; li.is-gate ● ; li.is-ia ◆
+     Diff ................. figure.diff > .diff-code > .ln-file.from/.to, .ln-hunk,
+                            del.ln.ln-del / ins.ln.ln-add (.no .no .sg .tx); PII en .pii, seudónimo en <mark>
+     Tabla ................ <div class="tbl stack-sm"><table class="w-md|w-lg …">
+                            stack-sm = en teléfono cada fila es un bloque; td[data-label] pone la etiqueta.
+                            .kv clave-valor · .dec decisiones (col. 2 elegida, col. 3 descartada)
+                            .metrics: una dimensión por <tbody>, th.grp-h con rowspan; metas en td.num
+     Sección .............. <section class="sec" id="x"><div class="sec-head"><h2><span class="n">1</span> Título</h2>
+                            <a class="path" href="#x">/ruta/#x</a></div>…</section>
+     Tachado .............. <span class="redact">palabra</span>
+
+   Fuentes: en el <head> de cada página, antes de este archivo:
+     <link rel="preconnect" href="https://fonts.googleapis.com">
+     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible+Next:wght@400..700&family=Martian+Mono:wdth,wght@75..100,400..800&display=swap">
+   ========================================================================== */
+
+:root{
+  color-scheme:dark;
+
+  /* tinta (fondos) */
+  --ink:#0C1B25;
+  --ink-1:#12232D;
+  --ink-2:#182A35;
+  /* reglas */
+  --rule:#36454F;
+  --rule-2:#57666F;
+  /* texto */
+  --paper:#EEE9DF;
+  --paper-2:#D6D2CA;
+  --muted:#A2AEB8;
+
+  /* semántica */
+  --code:#62DBB1;
+  --ia:#D89AEC;
+  --store:#77C9F3;
+  --leak:#FD7772;
+  --mark:#F6DE45;
+  --mark-ink:#1E1B0A;
+
+  /* fondos del diff */
+  --code-tint:#113127;   /* línea + · caja de código */
+  --leak-tint:#411E1E;   /* línea − · línea y caja de la compuerta */
+  --ia-tint:#34223A;     /* caja de IA */
+  --store-tint:#122E3B;  /* caja de almacenamiento */
+  --leak-word:#852E30;   /* PII dentro de la línea − */
+
+  /* barra de tachado: blanco con mix-blend-mode:difference = papel sobre tinta, texto en negativo */
+  --redact:#FFFFFF;
+
+  /* tipografía */
+  --f-mono:"Martian Mono", ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+  --f-text:"Atkinson Hyperlegible Next", "Atkinson Hyperlegible", -apple-system, BlinkMacSystemFont, "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+
+  --t-2xs:.6875rem;                                  /* 11  etiquetas en mayúsculas */
+  --t-xs:.75rem;                                     /* 12  metadatos */
+  --t-mono:.8125rem;                                 /* 13  código en tablas y listas */
+  --t-sm:.9375rem;                                   /* 15  tablas, notas */
+  --t-base:1.0625rem;                                /* 17  texto */
+  --t-md:1.25rem;                                    /* 20  entradilla */
+  --t-h3:1.125rem;                                   /* 18 */
+  --t-h2:clamp(1.5rem, 1.1rem + 1.3vw, 2.125rem);    /* 24–34 */
+  --t-claim:clamp(1.3rem, .95rem + 1.6vw, 2.25rem);  /* 21–36 */
+  --t-h1:clamp(2.1rem, .9rem + 5.6vw, 5.75rem);      /* 34–92 */
+  --lh:1.6;
+
+  --measure:34em;                                  /* ≈ 70–75 caracteres en Atkinson */
+  --wrap:76rem;
+  --pad:clamp(16px, 4vw, 56px);
+}
+
+/* --------------------------------------------------------------------------
+   Base
+   -------------------------------------------------------------------------- */
+*,*::before,*::after{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%;text-size-adjust:100%;background:var(--ink)}
+body{
+  margin:0;min-height:100vh;
+  background:var(--ink);color:var(--paper-2);
+  font-family:var(--f-text);font-size:var(--t-base);line-height:var(--lh);font-weight:400;
+  -webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;
+}
+::selection{background:var(--mark);color:var(--mark-ink)}
+
+a{color:var(--paper);text-decoration-line:underline;text-decoration-thickness:1px;text-decoration-color:var(--rule-2);text-underline-offset:.24em}
+a:hover{text-decoration-color:currentColor}
+:focus-visible{outline:2px solid var(--mark);outline-offset:3px}
+
+.wrap{max-width:var(--wrap);margin-inline:auto;padding-inline:var(--pad)}
+.sr-only{position:absolute!important;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
+
+h1,h2,h3{font-family:var(--f-mono);color:var(--paper);text-wrap:balance}
+p{margin:0 0 .85em;max-width:var(--measure);text-wrap:pretty}
+b,strong{font-weight:700;color:var(--paper)}
+
+code,.mono{font-family:var(--f-mono);font-size:.82em;font-weight:400}
+code{color:var(--paper);background:var(--ink-2);padding:.1em .36em;border-radius:2px;-webkit-box-decoration-break:clone;box-decoration-break:clone}
+mark{background:var(--mark);color:var(--mark-ink);padding:0 .14em}
+
+.c-code{color:var(--code)}
+.c-ia{color:var(--ia)}
+.c-store{color:var(--store)}
+.c-leak{color:var(--leak)}
+.muted{color:var(--muted)}
+.note{font-size:var(--t-sm);line-height:1.5;color:var(--muted);margin:.6em 0 0;max-width:var(--measure)}
+
+/* listas de texto: guion en mono, sin viñetas redondas */
+ul.dash{list-style:none;margin:0 0 1em;padding:0;max-width:var(--measure)}
+ul.dash > li{position:relative;padding-left:1.5em;margin:0 0 .5em}
+ul.dash > li::before{content:"-";position:absolute;left:0;font-family:var(--f-mono);color:var(--muted)}
+
+/* --------------------------------------------------------------------------
+   Roles semánticos y marcadores
+   Un rol fija --role; cada componente decide si pinta el texto o solo el marcador.
+   Forma del marcador: code ■  ai ◆  store □  danger ●
+   -------------------------------------------------------------------------- */
+.code{--role:var(--code)}
+.ai{--role:var(--ia)}
+.store{--role:var(--store)}
+.danger{--role:var(--leak)}
+
+.tag{font:500 var(--t-xs)/1 var(--f-mono);letter-spacing:.02em;white-space:nowrap;color:var(--role,var(--muted));margin-inline:.1em}
+
+.tag::before,.mk::before,.lane > b::before,.stack li:is(.code,.ai,.store,.danger)::before{
+  content:"";display:inline-block;width:.62em;height:.62em;margin-right:.5em;vertical-align:0;background:var(--role,currentColor);
+}
+:is(.tag,.mk,.stack li).ai::before,.lane.ai > b::before{transform:rotate(45deg) scale(.86)}
+:is(.tag,.mk,.stack li).store::before,.lane.store > b::before{background:none;border:.13em solid var(--role)}
+:is(.tag,.mk,.stack li).danger::before,.lane.danger > b::before{border-radius:50%}
+
+/* --------------------------------------------------------------------------
+   Barra de navegación
+   -------------------------------------------------------------------------- */
+.topnav{border-bottom:1px solid var(--rule)}
+.topnav .wrap{display:flex;flex-wrap:wrap;align-items:center;gap:6px 8px;min-height:52px;font:500 var(--t-xs)/1 var(--f-mono);letter-spacing:.03em}
+.topnav a{color:var(--muted);text-decoration:none;padding:7px 9px}
+.topnav a:first-child{margin-left:-9px}
+.topnav a:hover{color:var(--paper)}
+.topnav a[aria-current="page"]{background:var(--paper);color:var(--ink)}
+.topnav .sep{color:var(--rule-2)}
+
+/* --------------------------------------------------------------------------
+   Encabezado
+   -------------------------------------------------------------------------- */
+.hero{padding:clamp(36px,6vw,88px) 0 clamp(8px,2vw,24px)}
+.eyebrow{font:500 clamp(.8125rem,.75rem + .3vw,1rem)/1.7 var(--f-mono);letter-spacing:.04em;color:var(--muted);margin:0 0 clamp(14px,2vw,26px);max-width:none}
+h1{
+  /* --fit = ancho en em de la frase que no debe partirse (h1 .nw); "Corpus anonimizado" = 10,53em */
+  --fit:10.9;
+  font-size:min(var(--t-h1), calc((100vw - 2 * var(--pad)) / var(--fit)));font-weight:760;font-stretch:75%;
+  line-height:.98;letter-spacing:-.015em;margin:0 0 .3em;
+}
+h1 .nw{white-space:nowrap}
+h1 .dot{color:var(--muted)}
+.sub{font:600 var(--t-md)/1.3 var(--f-mono);color:var(--paper);margin:0 0 14px}
+.byline{font:400 var(--t-xs)/1.6 var(--f-mono);color:var(--muted);margin:0 0 6px;max-width:none}
+.lede{font-size:var(--t-md);line-height:1.5;color:var(--paper);max-width:var(--measure);margin:0 0 1.1em}
+.claim{
+  font-family:var(--f-mono);font-size:var(--t-claim);font-weight:600;font-stretch:87.5%;
+  line-height:1.3;letter-spacing:-.01em;color:var(--paper);max-width:40ch;margin:0 0 .9em;text-wrap:balance;
+}
+.toarch,.more{font:500 var(--t-sm)/1.4 var(--f-mono);margin:16px 0 0;max-width:none}
+
+/* El tachado: una barra sólida cruza la palabra; el texto queda en negativo y se sigue leyendo. */
+.redact{position:relative;white-space:nowrap;color:var(--paper)}
+.redact::after{
+  content:"";position:absolute;inset:-.06em -.2em -.04em;
+  background:var(--redact);mix-blend-mode:difference;pointer-events:none;
+  transform-origin:0 50%;animation:tachar .72s cubic-bezier(.7,0,.2,1) .45s both;
+}
+@keyframes tachar{from{transform:scaleX(0)}to{transform:scaleX(1)}}
+
+/* --------------------------------------------------------------------------
+   Secciones
+   -------------------------------------------------------------------------- */
+.sec{padding-top:clamp(56px,7vw,96px)}
+.sec-head{display:flex;flex-wrap:wrap;align-items:baseline;justify-content:space-between;gap:8px 24px;padding-top:18px;margin:0 0 22px;border-top:1px solid var(--rule-2)}
+h2{
+  display:grid;grid-template-columns:auto minmax(0,1fr);column-gap:.6em;align-items:start;
+  font-size:var(--t-h2);font-weight:620;font-stretch:87.5%;line-height:1.15;letter-spacing:-.012em;margin:0;
+}
+/* número de sección como bloque tachado */
+h2 .n{min-width:1.75em;margin-top:.14em;padding:.16em .35em .12em;background:var(--paper);color:var(--ink);font-size:.56em;font-weight:700;font-stretch:100%;line-height:1.1;text-align:center;letter-spacing:0}
+.path{font:400 var(--t-xs)/1.2 var(--f-mono);color:var(--muted);text-decoration:none;white-space:nowrap}
+.path:hover{color:var(--paper);text-decoration:underline}
+h3{font-size:var(--t-h3);font-weight:600;line-height:1.3;margin:2.3em 0 .7em}
+/* .h3: un h2 (u otro nivel) que se ve como h3; el nivel lo decide el esquema, no el tamaño */
+.h3{display:block;font-size:var(--t-h3);font-weight:600;font-stretch:100%;line-height:1.3;letter-spacing:0;margin:2.3em 0 .7em}
+
+.thesis{margin-top:clamp(20px,3vw,36px);padding-top:clamp(24px,3vw,36px);border-top:1px solid var(--rule-2)}
+
+/* --------------------------------------------------------------------------
+   Tablas tipo terminal: cabecera mono, reglas finas, números tabulares
+   -------------------------------------------------------------------------- */
+.tbl{overflow-x:auto;-webkit-overflow-scrolling:touch;margin:16px 0 28px;scrollbar-width:thin;scrollbar-color:var(--rule-2) transparent}
+table{border-collapse:collapse;width:100%;font-size:var(--t-sm);line-height:1.5;font-variant-numeric:tabular-nums}
+th,td{padding:11px 12px;text-align:left;vertical-align:top;border-bottom:1px solid var(--rule)}
+th:first-child,td:first-child{padding-left:0}
+th:last-child,td:last-child{padding-right:0}
+thead th{padding-top:4px;padding-bottom:10px;font:500 var(--t-2xs)/1.3 var(--f-mono);letter-spacing:.1em;text-transform:uppercase;color:var(--muted);border-bottom-color:var(--rule-2);white-space:nowrap}
+tbody th{font-weight:600;color:var(--paper)}
+td{color:var(--paper-2)}
+tbody tr:last-child > *{border-bottom-color:var(--rule-2)}
+tbody tr:hover > *{background:var(--ink-1)}
+.kv th{width:9.5rem;font:500 var(--t-2xs)/calc(var(--t-sm) * 1.5) var(--f-mono);letter-spacing:.1em;text-transform:uppercase;color:var(--muted);white-space:nowrap}
+.w-md{min-width:600px}
+.w-lg{min-width:700px}
+td.nw,th.nw{white-space:nowrap}
+.num{font-family:var(--f-mono);font-size:.84em;color:var(--paper);white-space:nowrap}
+.api td.nw code{background:none;padding:0;font-size:.86em}
+.api td:first-child code{font-weight:700}
+.model td.nw code{background:none;padding:0;color:var(--store);font-size:.86em}
+.model .mono{color:var(--paper-2)}
+.dec tbody tr > :nth-child(2){color:var(--paper)}
+.dec tbody tr > :nth-child(3){color:var(--muted)}
+/* métricas: cada <tbody> es una dimensión; la regla fuerte separa dimensiones */
+.metrics tbody > tr:last-child > *,.metrics th[rowspan]{border-bottom-color:var(--rule-2)}
+.metrics td:first-child{padding-left:12px}
+.grp-h{font-family:var(--f-mono);font-size:var(--t-mono);font-weight:600}
+
+/* --------------------------------------------------------------------------
+   Diff unificado (antes / después)
+   -------------------------------------------------------------------------- */
+.diff{margin:clamp(24px,3vw,36px) 0 0;max-width:none}
+.diff-code{background:var(--ink-1);border:1px solid var(--rule);font-family:var(--f-mono);font-size:clamp(.8125rem,.76rem + .25vw,.9375rem);line-height:1.7;color:var(--paper-2)}
+.diff .ln{display:grid;grid-template-columns:2.6em 2.6em 1.9em minmax(0,1fr);margin:0;text-decoration:none}
+.diff .no{padding:.34em .55em 0 0;text-align:right;color:var(--muted);-webkit-user-select:none;user-select:none}
+.diff .sg{padding-top:.34em;text-align:center;font-weight:700;-webkit-user-select:none;user-select:none}
+.diff .tx{padding:.34em 1.1em .34em .25em;min-width:0;overflow-wrap:anywhere}
+.diff .ln-file{display:block;padding:.34em 1.1em;font-weight:600;color:var(--paper)}
+.diff .ln-file:first-child{padding-top:.7em}
+.diff .ln-file .sg{display:inline;padding:0;margin-right:.6em}
+.diff .ln-file.from .sg{color:var(--leak)}
+.diff .ln-file.to .sg{color:var(--code)}
+.diff .ln-file.to{padding-bottom:.7em;border-bottom:1px solid var(--rule)}
+.diff .ln-hunk{display:block;padding:.34em 1.1em;background:var(--ink-2);color:var(--muted)}
+.diff .ln-del{background:var(--leak-tint)}
+.diff .ln-del .sg{color:var(--leak)}
+.diff .ln-add{background:var(--code-tint)}
+.diff .ln-add .sg{color:var(--code)}
+.diff .pii{background:var(--leak-word);color:var(--paper);padding:.05em .16em}
+.diff mark{padding:.05em .16em}
+.diff figcaption{margin-top:.8em}
+
+/* --------------------------------------------------------------------------
+   Pista: ENTRADA → PIPELINE → BIFURCACIÓN → SALIDA (y la secuencia del incidente)
+   Cualquier número de etapas; .st-wide da más ancho. Etiquetas cortas (1–2 palabras).
+   -------------------------------------------------------------------------- */
+.track{--k:12px;--gap:16px;--title:calc(var(--t-sm) * 1.3);list-style:none;margin:clamp(30px,4vw,48px) 0;padding:0;display:flex;max-width:none}
+.st{position:relative;flex:1 1 0;min-width:0;margin:0;padding-right:26px}
+.st.st-wide{flex-grow:1.5}
+.st:last-child{padding-right:0}
+.st-k{display:flex;align-items:center;gap:10px;height:var(--k);margin-bottom:var(--gap);font:500 var(--t-xs)/1 var(--f-mono);letter-spacing:.12em;text-transform:uppercase;color:var(--muted);white-space:nowrap}
+.st-k::after{content:"";flex:1 1 auto;min-width:12px;height:1px;background:var(--rule-2)}
+.st:last-child .st-k::after{display:none}
+.st:not(:last-child)::after{content:"";position:absolute;top:calc(var(--k) / 2 - 4px);right:18px;border-left:8px solid var(--rule-2);border-top:4px solid transparent;border-bottom:4px solid transparent}
+.st-k .sg{font-size:1.45em;font-weight:700;margin-right:-4px}
+.st-k .sg.del{color:var(--leak)}
+.st-k .sg.add{color:var(--code)}
+.st b{display:block;font:600 var(--t-sm)/1.3 var(--f-mono);color:var(--paper)}
+.st small{display:block;margin-top:5px;font-size:var(--t-sm);line-height:1.45;color:var(--muted)}
+
+/* bifurcación dibujada como árbol: tronco bajo la etiqueta, rama a la mitad de cada título */
+.lane{position:relative;padding-left:24px}
+.lane:not(:last-child){padding-bottom:var(--gap)}
+.lane::before{content:"";position:absolute;left:4px;top:calc(4px - var(--gap));bottom:0;width:1px;background:var(--rule-2)}
+.lane:last-child::before{bottom:auto;height:calc(var(--gap) - 4px + var(--title) / 2)}
+.lane::after{content:"";position:absolute;left:4px;top:calc(var(--title) / 2);width:13px;height:1px;background:var(--rule-2)}
+.lane > b{color:var(--role)}
+
+/* --------------------------------------------------------------------------
+   Listado con canal (etapas del pipeline): número de línea + marcadores
+   ● compuerta (punto de interrupción)   ◆ LLM
+   -------------------------------------------------------------------------- */
+.listing{--g:4.5rem;--edge:3.5rem;--py:12px;--lnh:calc(var(--t-base) * var(--lh));list-style:none;margin:24px 0 30px;padding:0;counter-reset:ln;position:relative;max-width:none;border-top:1px solid var(--rule);border-bottom:1px solid var(--rule)}
+.listing::before{content:"";position:absolute;z-index:1;top:0;bottom:0;left:var(--edge);width:1px;background:var(--rule)}
+.listing > li{counter-increment:ln;position:relative;margin:0;padding:var(--py) max(18px, calc(100% - var(--g) - 38em)) var(--py) var(--g)}
+.listing > li + li{border-top:1px solid var(--ink-2)}
+.listing > li::before{content:counter(ln);position:absolute;right:calc(100% - var(--edge) + .6rem);top:var(--py);font:500 var(--t-mono)/var(--lnh) var(--f-mono);color:var(--muted)}
+.listing > li:hover{background:var(--ink-1)}
+.listing > li.is-gate,.listing > li.is-gate:hover{background:var(--leak-tint)}
+.listing > li.is-gate::after,.listing > li.is-ia::after{content:"";position:absolute;left:.4rem;top:calc(var(--py) + (var(--lnh) - .6rem) / 2);width:.6rem;height:.6rem}
+.listing > li.is-gate::after{border-radius:50%;background:var(--leak)}
+.listing > li.is-ia::after{background:var(--ia);transform:rotate(45deg) scale(.86)}
+.layers{list-style:none;margin:.45em 0 .5em;padding:0}
+.layers > li{position:relative;margin:0 0 .35em;padding-left:2.3em}
+.layers .lk{position:absolute;left:0;top:.1em;font:500 var(--t-mono)/inherit var(--f-mono);color:var(--muted)}
+.listing .after{display:block}
+
+/* --------------------------------------------------------------------------
+   Se reemplaza / Se conserva
+   -------------------------------------------------------------------------- */
+.split{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));margin:30px 0 8px;border-top:1px solid var(--rule);border-bottom:1px solid var(--rule)}
+.half{min-width:0;padding:18px 28px 22px 0}
+.half + .half{padding:18px 0 22px 28px;border-left:1px solid var(--rule)}
+.half .k{display:flex;align-items:center;gap:.7em;margin:0 0 12px;font:500 var(--t-2xs)/1 var(--f-mono);letter-spacing:.12em;text-transform:uppercase;color:var(--paper)}
+.half .sg{font-size:1.7em;font-weight:700;letter-spacing:0}
+.half.repl .sg{color:var(--leak)}
+.half.keep .sg{color:var(--muted)}
+.half p{margin:0}
+
+/* --------------------------------------------------------------------------
+   Stack
+   -------------------------------------------------------------------------- */
+.stack{list-style:none;margin:14px 0 22px;padding:0;display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,16rem),1fr));border-top:1px solid var(--rule);max-width:none}
+.stack li{margin:0;padding:10px 24px 10px 0;border-bottom:1px solid var(--rule);font:400 var(--t-mono)/1.5 var(--f-mono);color:var(--paper-2)}
+.stack li:is(.code,.ai,.store,.danger){color:var(--role)}
+
+/* --------------------------------------------------------------------------
+   Portada: índice de entregables como listado
+   -------------------------------------------------------------------------- */
+.home .hero{padding:clamp(28px,4vw,56px) 0 0}
+.home .eyebrow{font-size:clamp(.9375rem,.75rem + .9vw,1.375rem);letter-spacing:0;color:var(--paper-2);margin-bottom:clamp(12px,1.5vw,20px)}
+.home h1{margin-bottom:.22em}
+.home .claim{font-size:clamp(1.2rem,.9rem + 1.1vw,1.75rem);max-width:44ch}
+.index{list-style:none;margin:clamp(24px,3vw,40px) 0 clamp(56px,8vw,104px);padding:0;border-top:1px solid var(--rule-2);max-width:none}
+.index li{margin:0;border-bottom:1px solid var(--rule-2)}
+.index a{display:grid;grid-template-columns:3.5rem minmax(0,29rem) minmax(0,1fr) 8.5rem;align-items:baseline;gap:6px 28px;padding:18px 16px;margin-inline:-16px;color:inherit;text-decoration:none}
+.index .i-n{font:500 var(--t-xs)/1 var(--f-mono);color:var(--muted)}
+.index .i-t{justify-self:start;margin-left:-.2em;padding:.04em .2em;font-family:var(--f-mono);font-size:clamp(1.25rem,1rem + .9vw,1.75rem);font-weight:650;font-stretch:87.5%;line-height:1.2;color:var(--paper)}
+.index .i-d{color:var(--paper-2);line-height:1.5}
+.index .i-p{justify-self:end;font:400 var(--t-xs)/1 var(--f-mono);color:var(--muted);white-space:nowrap}
+.index .i-p::after{content:" \2192"}
+/* enlace externo (sin descripción): la dirección ocupa descripción + ruta; ↗ = pestaña nueva */
+.index .i-ext{grid-column:3 / -1;justify-self:start;white-space:normal;line-height:1.4}
+.index .i-ext::after{content:" \2197"}
+.index a:hover,.index a:focus-visible{background:var(--ink-1)}
+.index a:hover .i-t,.index a:focus-visible .i-t{background:var(--paper);color:var(--ink)}
+.index a:focus-visible{outline-offset:-2px}
+
+/* --------------------------------------------------------------------------
+   Diagrama de arquitectura (SVG en línea: <svg class="dg">)
+   Los fill/stroke del SVG son tokens de color: aquí se reasignan a la paleta
+   del tema (y a la clara al imprimir). En el SVG usa solo estos valores:
+     #12161D texto · #5A6371 secundario · #FFFFFF caja · #F6F7F9 hueco
+     #0E7C66 código · #C2410C IA · #3B5B8C almacén · #B42318 fuga/control
+     #1F3FBF HTTP y ruta en vivo · #F5D565 etiqueta Dn · #D9DDE4 regla fina
+     fondos: #E8F4F1 código · #FDF0E8 IA · #EBF0F7 almacén · #FCEDEC control
+             #EEF0F3 externo · #ECEFFB HTTP · #FFFBEB nota de decisión
+   Tipos: .t .t13 .t15 títulos · .d .dm texto · .m .s .ph .b mono.
+   -------------------------------------------------------------------------- */
+.wide{max-width:calc(1500px + 2 * var(--pad));margin-inline:auto;padding-inline:var(--pad)}
+.diagram{margin:clamp(24px,3vw,40px) 0 0}
+.diagram .scroll{overflow-x:auto;-webkit-overflow-scrolling:touch;border:1px solid var(--rule);background:var(--ink);scrollbar-width:thin;scrollbar-color:var(--rule-2) transparent}
+.diagram svg{display:block;width:100%;min-width:1180px;height:auto}
+.diagram figcaption{margin-top:.8em}
+.hint{display:none;font:500 var(--t-xs)/1.4 var(--f-mono);color:var(--muted);margin:0 0 8px}
+
+.dg{--dg-box:var(--ink-1);--dg-line:var(--paper-2);--http:var(--paper);fill:var(--paper)}
+.dg rect{rx:2px;ry:2px}
+/* tipografía */
+.dg .t,.dg .t13,.dg .t15{font-family:var(--f-text);font-weight:700}
+/* el número de etapa sigue en mono, como código */
+.dg :is(.t,.t15) > tspan[fill="#0E7C66" i]{font-family:var(--f-mono);font-stretch:75%}
+.dg .t{font-size:14px}
+.dg .t13{font-size:13px}
+.dg .t15{font-size:15px}
+.dg .d,.dg .dm{font-family:var(--f-text);font-size:12.5px;font-weight:400}
+.dg .dm{font-weight:700}
+.dg .m,.dg .s,.dg .ph,.dg .b{font-family:var(--f-mono);font-stretch:75%}
+.dg .m{font-size:12px;font-weight:500}
+.dg .s{font-size:11px;font-weight:400}
+.dg .ph{font-size:11.5px;font-weight:600;letter-spacing:.08em}
+.dg .b{font-size:11px;font-weight:700}
+/* rellenos */
+.dg [fill="#12161D" i]{fill:var(--paper)}
+.dg [fill="#5A6371" i]{fill:var(--muted)}
+.dg [fill="#FFFFFF" i]{fill:var(--dg-box)}
+.dg :is(text,tspan)[fill="#FFFFFF" i]{fill:var(--ink)}
+.dg [fill="#F6F7F9" i]{fill:var(--ink)}
+.dg [fill="#EEF0F3" i]{fill:var(--ink-2)}
+.dg [fill="#ECEFFB" i],.dg [fill="#FFFBEB" i]{fill:var(--ink-1)}
+.dg [fill="#F5D565" i]{fill:var(--paper)}
+.dg [fill="#E8F4F1" i]{fill:var(--code-tint)}
+.dg [fill="#FDF0E8" i]{fill:var(--ia-tint)}
+.dg [fill="#EBF0F7" i]{fill:var(--store-tint)}
+.dg [fill="#FCEDEC" i]{fill:var(--leak-tint)}
+.dg [fill="#0E7C66" i]{fill:var(--code)}
+.dg [fill="#C2410C" i]{fill:var(--ia)}
+.dg [fill="#3B5B8C" i]{fill:var(--store)}
+.dg [fill="#B42318" i]{fill:var(--leak)}
+.dg [fill="#1F3FBF" i]{fill:var(--http)}
+/* trazos */
+.dg [stroke="#12161D" i]{stroke:var(--dg-line)}
+.dg [stroke="#5A6371" i]{stroke:var(--muted)}
+.dg [stroke="#D9DDE4" i]{stroke:var(--rule)}
+.dg [stroke="#E3C04D" i]{stroke:var(--rule-2)}
+.dg [stroke="#0E7C66" i]{stroke:var(--code)}
+.dg [stroke="#C2410C" i]{stroke:var(--ia)}
+.dg [stroke="#3B5B8C" i]{stroke:var(--store)}
+.dg [stroke="#B42318" i]{stroke:var(--leak)}
+.dg [stroke="#1F3FBF" i]{stroke:var(--http)}
+/* casos especiales: lienzo, marcos, etiquetas Dn y puntas de flecha del flujo */
+.dg #fondo{fill:var(--ink)}
+.dg .caja-servicio{fill:none;stroke:var(--rule-2)}
+.dg .caja-job{fill:none;stroke:var(--rule-2)}
+.dg .caja-externo,.dg .caja-http{stroke:var(--rule-2)}
+.dg .b:not([fill]){fill:var(--ink)}
+.dg marker path[fill="#12161D" i]{fill:var(--dg-line)}
+
+/* Zoom del diagrama: solo existe con JavaScript (el script de la página añade .js-zoom y la barra).
+   Sin JavaScript el diagrama se ve completo y el marco se desliza en horizontal. */
+.js-zoom .hint{display:none}
+.dg-bar{position:sticky;top:0;z-index:2;display:flex;flex-wrap:wrap;align-items:center;gap:6px 16px;padding:6px;border:1px solid var(--rule);border-bottom:0;background:var(--ink-1);font:400 var(--t-xs)/1.4 var(--f-mono);color:var(--muted)}
+.dg-help{flex:1 1 16rem;min-width:0;padding-left:6px}
+.dg-ctrl{display:flex;align-items:center;gap:4px;margin-left:auto}
+.dg-btn{min-width:34px;height:34px;padding:0 10px;border:1px solid var(--rule-2);border-radius:0;background:var(--ink);color:var(--paper);font:600 var(--t-sm)/1 var(--f-mono);cursor:pointer}
+.dg-btn:hover{background:var(--ink-2);border-color:var(--muted)}
+.dg-btn:active{background:var(--paper);color:var(--ink)}
+.dg-btn[aria-disabled="true"]{background:var(--ink);border-color:var(--rule);color:var(--muted);cursor:default}
+.dg-btn.dg-fit{font-size:var(--t-xs);font-weight:500;letter-spacing:.04em}
+.dg-z{min-width:6.5ch;text-align:center;color:var(--paper);font-variant-numeric:tabular-nums}
+/* sin zoom, en táctil el navegador conserva el desplazamiento vertical de la página (pan-y); el arrastre hacia los lados mueve el diagrama */
+.js-zoom .scroll{position:relative;overflow:hidden;aspect-ratio:var(--ar);touch-action:pan-y;cursor:grab;-webkit-user-select:none;user-select:none}
+.js-zoom .scroll svg{min-width:0;width:100%;height:100%}
+.js-zoom .scroll.is-zoomed{touch-action:none}
+.js-zoom .scroll.is-dragging{cursor:grabbing}
+.js-zoom .scroll:focus-visible{outline-offset:-3px}
+@media (pointer:coarse){.dg-btn{min-width:44px;height:44px}}
+
+/* etiqueta de decisión fuera del SVG (D1–D5): mismo bloque invertido */
+.dn{display:inline-block;padding:.12em .42em;background:var(--paper);color:var(--ink);font:700 var(--t-2xs)/1.3 var(--f-mono);letter-spacing:.02em;vertical-align:.12em}
+.dec tbody tr > :first-child{font-weight:600;color:var(--paper)}
+.dec td:first-child{white-space:nowrap}
+
+/* listado con etiqueta propia en el canal (1, 4a, 4b, vivo…) en lugar del contador */
+.listing.labeled{--g:5.25rem;--edge:4.25rem}
+.listing.labeled > li::before{content:none}
+.listing .n{position:absolute;right:calc(100% - var(--edge) + .6rem);top:var(--py);font:500 var(--t-mono)/var(--lnh) var(--f-mono);font-stretch:87.5%;color:var(--muted);white-space:nowrap}
+.listing > li.is-live::after{content:"";position:absolute;left:.4rem;top:calc(var(--py) + (var(--lnh) - .6rem) / 2);width:.6rem;height:.6rem;border:2px solid var(--paper);border-radius:50%}
+.listing > li.is-live .n{color:var(--paper)}
+
+/* --------------------------------------------------------------------------
+   Pie
+   -------------------------------------------------------------------------- */
+.foot{margin-top:clamp(64px,9vw,112px);border-top:1px solid var(--rule);font:400 var(--t-xs)/1.6 var(--f-mono);color:var(--muted)}
+.foot .wrap{padding-block:16px 40px}
+.foot a{color:var(--paper-2)}
+
+/* --------------------------------------------------------------------------
+   Responsive
+   -------------------------------------------------------------------------- */
+@media (max-width:1080px){
+  .index a{grid-template-columns:2.5rem minmax(0,1fr);row-gap:8px}
+  .index .i-d,.index .i-p{grid-column:2}
+  .index .i-p{justify-self:start}
+}
+@media (max-width:760px){
+  .track{flex-direction:column;row-gap:12px}
+  .st{flex:none;padding-right:0}
+  .st:not(:last-child)::after{display:none}
+  .st:last-child .st-k::after{display:block}
+  .st + .st::before{content:"\2193";display:block;margin:0 0 12px;font:500 var(--t-sm)/1 var(--f-mono);color:var(--muted)}
+  .split{grid-template-columns:minmax(0,1fr)}
+  .half{padding-right:0}
+  .half + .half{padding-left:0;border-left:0;border-top:1px solid var(--rule)}
+  .path{display:none}
+}
+@media (max-width:760px){
+  /* tablas apiladas: cada fila es un bloque, la cabecera queda solo para lectores de pantalla */
+  .stack-sm table,.stack-sm tbody,.stack-sm tr,.stack-sm th,.stack-sm td{display:block;width:auto}
+  .stack-sm table{min-width:0}
+  .stack-sm thead{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap}
+  .stack-sm tr{padding:12px 0;border-bottom:1px solid var(--rule)}
+  .stack-sm tbody tr:last-child{border-bottom-color:var(--rule-2)}
+  .stack-sm th,.stack-sm td,.stack-sm .metrics td:first-child{padding:0;border:0}
+  .stack-sm tr > * + *{margin-top:6px}
+  .stack-sm td[data-label]::before{content:attr(data-label);display:block;font:500 var(--t-2xs)/1.8 var(--f-mono);letter-spacing:.1em;text-transform:uppercase;color:var(--muted)}
+  .stack-sm .kv th{width:auto;line-height:1.6}
+  .stack-sm .metrics tbody{display:block;border-bottom:1px solid var(--rule-2)}
+  .stack-sm .metrics tbody > tr:last-child{border-bottom:0}
+  .stack-sm .grp-h{margin-bottom:-4px}
+  .stack-sm .inl{display:inline-block;margin-right:.6em}
+  .stack-sm .inl + .inl{margin-top:0}
+  .listing{--g:3.25rem;--edge:2.5rem}
+  .listing.labeled{--g:4.5rem;--edge:3.75rem}
+  .listing > li{padding-right:12px}
+  .listing > li:is(.is-gate,.is-ia,.is-live)::after{left:-.1rem}
+  .hint{display:block}
+  .js-zoom .scroll{aspect-ratio:1 / 1;max-height:70vh}
+  .stack-sm .dec td:first-child{white-space:normal}
+}
+@media (max-width:480px){
+  .diff .ln{grid-template-columns:2.1em 2.1em 1.6em minmax(0,1fr)}
+  .diff .tx{padding-right:.8em}
+}
+
+/* --------------------------------------------------------------------------
+   Movimiento y modos de accesibilidad
+   -------------------------------------------------------------------------- */
+@media (prefers-reduced-motion:reduce){
+  .redact::after{animation:none}
+}
+@media (forced-colors:active){
+  .redact::after{display:none}
+  .redact{outline:2px solid CanvasText;outline-offset:1px}
+}
+
+/* --------------------------------------------------------------------------
+   Impresión / PDF: claro, sin fondos, filas enteras
+   -------------------------------------------------------------------------- */
+@media print{
+  :root{
+    color-scheme:light;
+    --ink:#FFFFFF;--ink-1:#FFFFFF;--ink-2:#FFFFFF;
+    --rule:#C3C8CC;--rule-2:#7D868D;
+    --paper:#111418;--paper-2:#1F2328;--muted:#5B6670;
+    --code:#0B6B4E;--ia:#7B2D8E;--store:#1B5A96;--leak:#B3261E;
+    --mark:#FFE45C;--mark-ink:#111418;
+    --code-tint:transparent;--leak-tint:transparent;--leak-word:transparent;--ia-tint:transparent;--store-tint:transparent;
+  }
+  @page{margin:14mm 14mm 16mm}
+  @page apaisado{size:landscape;margin:8mm}
+  html,body{background:#fff}
+  body{font-size:10.5pt;line-height:1.45}
+  .topnav,.path{display:none}
+  .wrap{max-width:none;padding:0}
+  .hero{padding:0 0 10pt}
+  h1{font-size:30pt}
+  .claim{font-size:15pt}
+  .sec{padding-top:18pt}
+  .tbl{overflow:visible}
+  .w-md,.w-lg{min-width:0}
+  th,td{padding:5pt 8pt 5pt 0}
+  thead{display:table-header-group}
+  tbody tr:hover > *,.listing > li:hover{background:none}
+  tr,.diff .ln,.listing > li,.st,.half,.stack li,.index li,.diff{break-inside:avoid;page-break-inside:avoid}
+  h2,h3,.sec-head{break-after:avoid;page-break-after:avoid}
+  a{color:inherit;text-decoration:none}
+  code{background:none;padding:0}
+  h2 .n{background:none;color:var(--paper);outline:1.2pt solid var(--paper);outline-offset:-1.2pt}
+  .topnav a[aria-current="page"]{background:none}
+  .diff-code{background:none;border-color:var(--rule-2)}
+  .diff .ln-hunk{background:none;border-top:1px solid var(--rule)}
+  .diff .pii{text-decoration:underline 1.5pt var(--leak);text-underline-offset:2pt}
+  .listing > li.is-gate{background:none}
+  .hint,.dg-bar{display:none}
+  .js-zoom .scroll{aspect-ratio:auto;max-height:none;overflow:visible}
+  .js-zoom .scroll svg{height:auto}
+  .diagram{page:apaisado;break-before:page;break-inside:avoid;margin:0}
+  .diagram .scroll{overflow:visible;border:0}
+  .diagram svg{min-width:0;width:100%;max-height:182mm}
+  .dn{background:none;color:var(--paper);outline:1pt solid var(--paper);outline-offset:-1pt}
+  .redact,mark,.tag::before,.mk::before,.lane > b::before,.stack li::before,.listing > li::after{-webkit-print-color-adjust:exact;print-color-adjust:exact}
+  .redact{background:#111418;color:#FFFFFF}
+  .redact::after{display:none}
+}
