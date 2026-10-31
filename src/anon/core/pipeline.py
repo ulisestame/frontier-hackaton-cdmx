@@ -240,6 +240,27 @@ def build_registry(eng: Engine, corpus) -> dict:
         ev = {p for p in eng.evidence("\n".join(texts)) if p != upid and eng.persons[p].kind == "customer"}
         if len(ev) == 1:
             eng.merge(upid, next(iter(ev)))
+    # Elimination: a homonym already linked to another chat user is not this one. When every
+    # candidate but one is taken, the user is that one, unless another user is left with the same
+    # one too (then neither is decided). Repeated until nothing changes.
+    taken = {eng.resolve_pid(f"u:{uid}") for uid in corpus.users}
+    changed = True
+    while changed:
+        changed = False
+        claims: dict[str, list[str]] = {}
+        for upid, cands in ambiguous.items():
+            if eng.resolve_pid(upid) != upid:
+                continue
+            real = {eng.resolve_pid(c) for c in cands} - {upid}
+            real = {c for c in real if c in eng.persons and eng.persons[c].kind in ("customer", "employee")}
+            left = real - taken
+            if len(real) >= 2 and len(left) == 1:
+                claims.setdefault(next(iter(left)), []).append(upid)
+        for target, users in claims.items():
+            if len(users) == 1:
+                eng.merge(users[0], target)
+                taken.add(target)
+                changed = True
     return threads
 
 

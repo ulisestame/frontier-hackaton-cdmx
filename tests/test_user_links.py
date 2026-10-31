@@ -50,3 +50,18 @@ def test_a_company_email_is_not_linked_to_a_customer_homonym():
     users = {"U1": _user("Renata Oquendo Lizcano", title="Analista", email="r.oquendo@kipupay.co")}
     eng = _registry(users, _thread("U1", "hola"), staff=True)
     assert eng.resolve_pid("u:U1") == "kp:KP-901"
+
+
+def test_a_homonym_linked_to_another_user_is_ruled_out():
+    users = {"U1": _user("Renata Oquendo", email="roquendo@example.com"), "U2": _user("Renata Oquendo")}
+    eng = _registry(users, _thread("U1", "hola") + _thread("U2", "buenas"))
+    assert eng.resolve_pid("u:U1") == "cl:CL-90002"
+    assert eng.resolve_pid("u:U2") == "cl:CL-90001"
+
+
+def test_two_users_left_with_the_same_homonym_stay_unlinked():
+    users = {"U1": _user("Renata Oquendo", email="roquendo@example.com"),
+             "U2": _user("Renata Oquendo"), "U3": _user("Renata Oquendo")}
+    eng = _registry(users, _thread("U1", "hola") + _thread("U2", "buenas") + _thread("U3", "hola"))
+    assert eng.resolve_pid("u:U2") == "u:U2"  # both left with the same homonym: neither is decided
+    assert eng.resolve_pid("u:U3") == "u:U3"
