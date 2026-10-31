@@ -77,7 +77,7 @@ ADDRESS_RX = re.compile(
 ISO_DATE_RX = re.compile(r"(?<!\d)((?:19|20)\d{2})-(\d{2})-(\d{2})(?!\d)")
 SLASH_DATE_RX = re.compile(r"(?<!\d)(\d{2})/(\d{2})/((?:19|20)\d{2})(?!\d)")
 MENTION_RX = re.compile(r"<@([A-Z0-9]+)(?:\|[^>]*)?>")
-TABLE_KEY_RX = re.compile(r"\b(CL-\d{4,6}|TX-\d{4,7}|PQR-\d{4}-\d{3,5}|KP-\d{3})\b")
+TABLE_KEY_RX = re.compile(r"\b(CL-\d{4,6}|PG-\d{4,6}|TX-\d{4,7}|PQR-\d{4}-\d{3,5}|KP-\d{3})\b")
 
 
 def ntoks(text: str) -> tuple[str, ...]:
