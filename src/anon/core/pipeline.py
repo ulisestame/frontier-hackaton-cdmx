@@ -40,6 +40,22 @@ def _blocked_tokens(engine: Engine) -> set[str]:
     return out
 
 
+_RESERVED_KINDS = ("birth", "cedula", "phone", "email", "plate", "passport", "account", "handle", "address")
+
+
+def _reserve_real_values(eng: Engine) -> None:
+    """Tell the factory every real identifier known so far, before it generates anything.
+
+    The validator rejects the output if any person's original form appears anywhere, and
+    the factory only auto-reserves the originals it has already been asked about. Birth
+    dates are the risky kind: in a ~20k-day space, about one pseudonym date per run
+    landed on another person's real date when reservation followed table order.
+    """
+    for kind, value in list(eng.id_index):
+        if kind in _RESERVED_KINDS and value:
+            eng.f.reserve(kind, [value])
+
+
 def load_state(state_dir: Path) -> dict:
     f = state_dir / STATE_FILE
     if f.exists():
@@ -383,6 +399,7 @@ def anonymize_corpus(corpus, state_dir: Path, progress: Callable[[dict], None] =
     eng = engine_from_state(prev) if prev else Engine(fakes.PseudonymFactory(SECRET, set(), None))
     threads = build_registry(eng, corpus)
     eng.f = fakes.PseudonymFactory(SECRET, _blocked_tokens(eng), prev.get("factory") if prev else None)
+    _reserve_real_values(eng)
     progress({"stage": "registry", "persons": len(eng.persons)})
     tables = [process_table_row(eng, r) for r in corpus.tables]
     progress({"stage": "tables", "done": len(tables)})
@@ -434,6 +451,7 @@ def _live_engine(state_dir: Path) -> tuple[Engine, dict]:
         state = load_state(Path(state_dir))
         eng = engine_from_state(state)
         eng.f = fakes.PseudonymFactory(SECRET, _blocked_tokens(eng), state.get("factory"))
+        _reserve_real_values(eng)
         _LIVE_CACHE.update({"mtime": mtime, "engine": eng, "entity_ids": dict(state.get("entity_ids", {}))})
     return _LIVE_CACHE["engine"], _LIVE_CACHE["entity_ids"]
 
