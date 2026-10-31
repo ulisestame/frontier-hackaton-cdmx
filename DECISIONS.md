@@ -56,7 +56,7 @@ Ningún seudónimo puede coincidir con un valor real de otra persona. Todos los 
 
 - **Reglas primero.** Un modelo de lenguaje quedaría solo para el residuo ambiguo, con caché y fail-closed. En esta versión no hizo falta: las reglas pasan el validador y los tests públicos sin gastar tokens. Descartado: todo con un modelo (costo, resultados no deterministas y riesgo de reescribir el texto en vez de reemplazar).
 - **Determinismo.** HMAC(secreto, persona) más el mapa persistido: la misma persona conserva su seudónimo entre fuentes, corridas y procesos, y una persona nueva recibe uno nuevo y único. Descartado: valores aleatorios o marcadores como `[NOMBRE]`, que rompen la consistencia y la utilidad.
-- **Fusión solo con coincidencia exacta.** Dos registros son la misma persona solo por un identificador duro, nunca por la ciudad o el cargo. Un cliente migrado se une a uno existente solo si su cédula coincide con exactamente uno; ante cualquier ambigüedad, no se fusiona.
+- **Fusión solo con coincidencia exacta.** Dos registros son la misma persona por un identificador duro (cédula, correo) o por un nombre completo exacto que coincide con una sola persona; nunca por la ciudad o el cargo. Ante homónimos decide la evidencia del hilo y, si no la hay, no se fusiona. Un cliente migrado se une a uno existente solo si su cédula coincide con exactamente uno.
 - **Fail-closed.** Lo que no se puede clasificar se trata como sensible, porque la fuga pesa 45 de 100 puntos. Se reemplaza, nunca se reescribe el texto.
 - **El pipeline corre aparte y el estado vive en disco.** La API responde aun si una corrida se cae, y las salidas se publican de golpe, nunca a medias.
 
