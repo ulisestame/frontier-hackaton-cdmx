@@ -134,3 +134,13 @@ def test_an_employee_row_prefers_colleagues():
     eng, _ = _company()
     out = eng.anonymize_text("Ramiro Quintana", Ctx(record_id="empleados:KP-903", record_text="Ramiro Quintana"))
     assert out == _rendered(eng, "kp:KP-901")
+
+
+def test_two_people_with_one_name_in_one_table_follow_their_column():
+    eng, _ = _company()
+    text = ("| Fecha | Agente | Cliente | Tema |\n| --- | --- | --- | --- |\n"
+            "| 2099-03-01 | Ramiro Quintana | Celina Aranda | Clave bloqueada |\n"
+            "| 2099-03-02 | Celina Aranda | Ramiro Quintana | Pago no aplicado |")
+    out = eng.anonymize_text(text, Ctx(record_id="doc_t", record_text=text)).split("\n")
+    assert _rendered(eng, "kp:KP-901") in out[2] and _rendered(eng, "cl:CL-90901") not in out[2]
+    assert _rendered(eng, "cl:CL-90901") in out[3] and _rendered(eng, "kp:KP-901") not in out[3]

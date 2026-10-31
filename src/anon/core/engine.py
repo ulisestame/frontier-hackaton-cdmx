@@ -88,6 +88,11 @@ ROLE_CUE = re.compile(
     r"jef[ea] de|vicepresident[ea]|ingenier[oa] de|ceo|cto|cfo|coo|reporta a)(?![\w])")
 CUSTOMER_KEY_RX = re.compile(r"\b(?:CL-\d{4,6}|PG-\d{4,6}|TX-\d{4,7}|PQR-\d{4}-\d{3,5})\b")
 KIND_GROUP = {"customer": "customer", "user": "customer", "employee": "employee"}
+# Column headers of a table row: who the cells under them are.
+EMPLOYEE_HEADER = re.compile(r"(?i)(?<![\w])(?:agente|asesor[a]?|analista|responsable|empleado|colaborador[a]?|"
+                             r"funcionari[oa]|l[ií]der|coordinador[a]?|gerente|reporta a|atendid[oa] por)(?![\w])")
+CUSTOMER_HEADER = re.compile(r"(?i)(?<![\w])(?:client[ea]s?|titular|usuari[oa]|deudor[a]?)(?![\w])")
+TABLE_RULE_RX = re.compile(r"\s*\|?\s*:?-{3,}:?\s*(?:\|\s*:?-{3,}:?\s*)*\|?\s*")
 
 
 def ntoks(text: str) -> tuple[str, ...]:
@@ -409,6 +414,16 @@ class Engine:
             forms = {ntoks(" ".join(p.given[:a] + p.surnames[:b]))
                      for a in {1, len(p.given)} for b in {1, len(p.surnames)} if a and b and p.given and p.surnames}
             shared = forms if shared is None else shared & forms
+        # The mention this call is about: its own line, and its column header in a table row.
+        line, header = self._tie_line(pids, ctx, text)
+        if header:
+            kinds = {k for k, rx in (("employee", EMPLOYEE_HEADER), ("customer", CUSTOMER_HEADER)) if rx.search(header)}
+            if len(kinds) == 1:
+                return kinds.pop()
+        if line:
+            cues = self._kind_cues(line)
+            if len(cues) == 1:
+                return cues.pop()
         votes: set[str] = set()
         for line in text.splitlines():
             toks = ntoks(line)
@@ -449,6 +464,59 @@ class Engine:
             for a in amounts:
                 out |= self.tx_index.get((d, a), set())
         return {self.resolve_pid(p) for p in out}
+
+    def _tie_line(self, pids: set[str], ctx: Ctx, text: str) -> tuple[str, str]:
+        """(line, column header) of the mention a tie call is about. find_names asks left to
+        right, so the n-th call for these candidates in this text is their n-th shared mention
+        (counted on the record's context, so each record starts over)."""
+        seq = vars(ctx).setdefault("_tie_seq", {})
+        key = (hash(text), frozenset(pids))
+        if key not in seq:
+            seq[key] = [self._tie_offsets(pids, text), 0]
+        offsets, n = seq[key]
+        if not offsets:
+            return "", ""
+        seq[key][1] = n + 1
+        pos = offsets[n % len(offsets)]
+        start = text.rfind("\n", 0, pos) + 1
+        end = text.find("\n", pos)
+        line = text[start:len(text) if end < 0 else end]
+        header = ""
+        if line.lstrip().startswith("|"):
+            col = line[:pos - start].count("|")
+            above = text[:start].splitlines()
+            for j in range(len(above) - 1, 0, -1):
+                if TABLE_RULE_RX.fullmatch(above[j]):
+                    cells = above[j - 1].split("|")
+                    header = cells[col] if col < len(cells) else ""
+                    break
+                if not above[j].lstrip().startswith("|"):
+                    break
+        return line, header
+
+    def _tie_offsets(self, pids: set[str], text: str) -> list[int]:
+        """Offsets of the mentions find_names resolves to exactly these candidates (same greedy
+        longest match), in order."""
+        toks = [(m.start(), m.end(), m.group(), norm(m.group())) for m in TOKEN_RX.finditer(text)]
+        out, i = [], 0
+        while i < len(toks):
+            best = None
+            for ftoks, ng, ns, pid in self.name_index.get(toks[i][3], []):
+                n = len(ftoks)
+                if i + n > len(toks) or (best and n < best[0]):
+                    continue
+                if all(toks[i + k][3] == ftoks[k] for k in range(n)) and self._gaps_ok(text, toks, i, n):
+                    if best is None or n > best[0]:
+                        best = (n, ns, {self.resolve_pid(pid)})
+                    elif n == best[0]:
+                        best[2].add(self.resolve_pid(pid))
+            if best is None:
+                i += 1
+                continue
+            if best[1] > 0 and best[2] == pids:
+                out.append(toks[i][0])
+            i += best[0]
+        return out
 
     def evidence(self, text: str) -> set[str]:
         """Persons pointed to by hard identifiers in a piece of text."""
