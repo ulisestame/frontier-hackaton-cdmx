@@ -5,6 +5,7 @@ Uses the small sample corpus (data/ is gitignored; the tests skip without it).
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import pytest
@@ -78,3 +79,34 @@ def test_a_new_author_owns_the_identifiers_in_their_message(published):
     assert "1093456781" not in text and "rquinones@gmail.com" not in text
     ent = next(e for e in res["entities"] if "Rosalinda Quiñones Tafur" in e["originals"])
     assert {"name", "cedula", "email"} <= set(ent["pseudonyms"])
+
+
+def _as_previous_version(state: Path, dest: Path) -> Path:
+    """The state a run of the previous version wrote: no chat context, no persisted keys."""
+    data = P.load_state(state)
+    data.pop("threads", None)
+    data.pop("authors", None)
+    for p in data["persons"].values():
+        p["ids"].pop("key", None)
+    (dest / P.STATE_FILE).write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
+    return dest
+
+
+def test_a_new_run_on_a_previous_version_state_keeps_every_pseudonym(tmp_path_factory):
+    first = tmp_path_factory.mktemp("run1")
+    eng, ids, *_, ents1, _ = P.anonymize_corpus(load_corpus(SAMPLE), first)
+    P.save_state(first, eng, ids)
+    old = _as_previous_version(first, tmp_path_factory.mktemp("run1-old-format"))
+    *_, ents2, _ = P.anonymize_corpus(load_corpus(SAMPLE), old)
+    pseud = lambda ents: {e["entity_id"]: e["pseudonyms"] for e in ents if not e.get("kept")}  # noqa: E731
+    assert pseud(ents2) == pseud(ents1)
+
+
+def test_live_on_a_previous_version_state(published, tmp_path_factory):
+    corpus, state, batch = published
+    old = _as_previous_version(state, tmp_path_factory.mktemp("run1-state"))
+    P._LIVE_CACHE.clear()
+    rows = [public_view(r) for r in corpus.tables]
+    assert P.anonymize_live("tables", rows, old)["records"] == [batch[r["id"]] for r in rows]
+    chats = [public_view(r) for r in corpus.chats]
+    assert [g["id"] for g in P.anonymize_live("chats", chats, old)["records"]] == [c["id"] for c in chats]

@@ -111,7 +111,7 @@ def register_table_row(eng: Engine, r: dict) -> str | None:
     """Register the person a clientes/empleados row is about; returns its pid."""
     c = r["columns"]
     if r["table"] == "clientes":
-        pid = f"cl:{c.get('cliente_id')}"
+        pid = eng.resolve_pid(f"cl:{c.get('cliente_id')}")
         if pid not in eng.persons:
             eng.add_person(pid, "customer", c.get("nombre_completo", ""), city=c.get("ciudad", ""))
         if c.get("ciudad") and c.get("barrio"):
@@ -124,7 +124,7 @@ def register_table_row(eng: Engine, r: dict) -> str | None:
         eng.index_id(pid, "key", c.get("cliente_id", ""))
         return pid
     if r["table"] == "empleados":
-        pid = f"kp:{c.get('id')}"
+        pid = eng.resolve_pid(f"kp:{c.get('id')}")
         if pid not in eng.persons:
             eng.add_person(pid, "employee", c.get("nombre", ""), city=c.get("ciudad", ""))
         for kind, col in (("email", "correo"), ("phone", "celular"), ("cedula", "documento"),
