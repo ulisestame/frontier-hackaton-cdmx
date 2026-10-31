@@ -193,6 +193,8 @@ class Engine:
         # ("" when the batch had no person for that author).
         self.threads: dict[str, dict] = {}
         self.authors: dict[str, str] = {}
+        # Pseudonym values the last run had already issued (set when loading its state).
+        self.published: set[str] = set()
 
     # ------------------------------------------------------------ registry --
     def resolve_pid(self, pid: str | None) -> str | None:

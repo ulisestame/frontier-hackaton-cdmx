@@ -102,6 +102,7 @@ def engine_from_state(state: dict) -> Engine:
     eng.alias = dict(state.get("alias", {}))
     eng.threads = dict(state.get("threads", {}))
     eng.authors = dict(state.get("authors", {}))
+    eng.published = {v for v in eng.memo.values() if isinstance(v, str)}
     return eng
 
 
@@ -413,7 +414,9 @@ def build_entities(eng: Engine, records: list[dict], entity_ids: dict) -> tuple[
                 pseud["name"] = cand
                 break
         for kind in ("email", "phone", "cedula", "address", "birth_iso", "plate", "passport", "account", "handle"):
-            for cand in sorted(p.rendered.get(kind, set())):
+            # a value the previous run had already published wins over one first seen now (a
+            # person who gives a new e-mail keeps the published one in the dictionary)
+            for cand in sorted(p.rendered.get(kind, set()), key=lambda v: (v not in eng.published, v)):
                 if hay.in_records(recs, cand):
                     pseud[kind] = cand
                     break
