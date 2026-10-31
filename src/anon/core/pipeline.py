@@ -187,6 +187,13 @@ def build_registry(eng: Engine, corpus) -> dict:
         cands = set(eng.id_index.get(("email", canon("email", email)), set())) if email else set()
         if not cands and real:
             cands = eng.candidates_by_name(real)
+            # A homonym on the other side of the counter is someone else: a "Cliente" profile or a
+            # personal e-mail is not an employee, and a company e-mail is not a customer.
+            staff = email.lower().endswith("@kipupay.co")
+            client = not staff and ((prof.get("title") or "").strip().lower() == "cliente" or bool(email))
+            drop = "customer" if staff else "employee" if client else None
+            if drop:
+                cands = {c for c in cands if eng.person(c).kind != drop}
         if len(cands) == 1:
             target = next(iter(cands))
             eng.alias[upid] = target
