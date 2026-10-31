@@ -188,6 +188,11 @@ class Engine:
         self.memo: dict[str, str] = {}
         self.kept_seen: dict[str, set[str]] = {}
         self.warnings: list[str] = []
+        # Chat context of the last full run, persisted so live /anonymize sees what the batch
+        # saw: thread_id -> {"near": [pids], "owner": pid | None}, and author key -> pid
+        # ("" when the batch had no person for that author).
+        self.threads: dict[str, dict] = {}
+        self.authors: dict[str, str] = {}
 
     # ------------------------------------------------------------ registry --
     def resolve_pid(self, pid: str | None) -> str | None:

@@ -70,6 +70,8 @@ def save_state(state_dir: Path, engine: Engine, entity_ids: dict) -> None:
         "entity_ids": entity_ids,
         "factory": engine.f.export_state(),
         "alias": engine.alias,
+        "threads": engine.threads,
+        "authors": engine.authors,
         "persons": {
             pid: {
                 "kind": p.kind, "given": p.given, "surnames": p.surnames, "gender": p.gender,
@@ -98,48 +100,59 @@ def engine_from_state(state: dict) -> Engine:
                 p.add_id(kind, v)
                 eng.id_index.setdefault((kind, v), set()).add(pid)
     eng.alias = dict(state.get("alias", {}))
+    eng.threads = dict(state.get("threads", {}))
+    eng.authors = dict(state.get("authors", {}))
     return eng
 
 
 # --------------------------------------------------------------- registry ---
 
+def register_table_row(eng: Engine, r: dict) -> str | None:
+    """Register the person a clientes/empleados row is about; returns its pid."""
+    c = r["columns"]
+    if r["table"] == "clientes":
+        pid = f"cl:{c.get('cliente_id')}"
+        if pid not in eng.persons:
+            eng.add_person(pid, "customer", c.get("nombre_completo", ""), city=c.get("ciudad", ""))
+        if c.get("ciudad") and c.get("barrio"):
+            # barrios of rows added after the corpus grows become detectable in free text
+            fakes.register_barrio(c["ciudad"], c["barrio"])
+        for kind, col in (("cedula", "num_doc"), ("email", "correo"), ("phone", "celular"),
+                          ("address", "direccion"), ("birth", "fecha_nacimiento")):
+            eng.index_id(pid, kind, c.get(col, ""))
+        # record keys are person ids, so they are persisted and live requests find the owner
+        eng.index_id(pid, "key", c.get("cliente_id", ""))
+        return pid
+    if r["table"] == "empleados":
+        pid = f"kp:{c.get('id')}"
+        if pid not in eng.persons:
+            eng.add_person(pid, "employee", c.get("nombre", ""), city=c.get("ciudad", ""))
+        for kind, col in (("email", "correo"), ("phone", "celular"), ("cedula", "documento"),
+                          ("birth", "fecha_nacimiento")):
+            eng.index_id(pid, kind, c.get(col, ""))
+        mail = c.get("correo", "")
+        if "@" in mail:
+            eng.index_id(pid, "handle", mail.split("@")[0])
+        eng.index_id(pid, "key", c.get("id", ""))
+        return pid
+    return None
+
+
 def build_registry(eng: Engine, corpus) -> dict:
     """Identity registry from structured sources. Returns per-thread context."""
     rows = corpus.tables
     for r in rows:
-        c = r["columns"]
-        if r["table"] == "clientes":
-            pid = f"cl:{c.get('cliente_id')}"
-            if pid not in eng.persons:
-                eng.add_person(pid, "customer", c.get("nombre_completo", ""), city=c.get("ciudad", ""))
-            if c.get("ciudad") and c.get("barrio"):
-                # barrios of rows added after the corpus grows become detectable in free text
-                fakes.register_barrio(c["ciudad"], c["barrio"])
-            for kind, col in (("cedula", "num_doc"), ("email", "correo"), ("phone", "celular"),
-                              ("address", "direccion"), ("birth", "fecha_nacimiento")):
-                eng.index_id(pid, kind, c.get(col, ""))
-            eng.id_index.setdefault(("key", c.get("cliente_id", "")), set()).add(pid)
-        elif r["table"] == "empleados":
-            pid = f"kp:{c.get('id')}"
-            if pid not in eng.persons:
-                eng.add_person(pid, "employee", c.get("nombre", ""), city=c.get("ciudad", ""))
-            for kind, col in (("email", "correo"), ("phone", "celular"), ("cedula", "documento"),
-                              ("birth", "fecha_nacimiento")):
-                eng.index_id(pid, kind, c.get(col, ""))
-            mail = c.get("correo", "")
-            if "@" in mail:
-                eng.index_id(pid, "handle", mail.split("@")[0])
-            eng.id_index.setdefault(("key", c.get("id", "")), set()).add(pid)
+        register_table_row(eng, r)
     for r in rows:
         c = r["columns"]
         owner = eng.id_index.get(("key", c.get("cliente_id", "")), set())
         if r["table"] == "pqrs" and owner:
             pid = next(iter(owner))
-            eng.id_index.setdefault(("key", c.get("radicado", "")), set()).add(pid)
+            eng.index_id(pid, "key", c.get("radicado", ""))
             if c.get("cedula"):
                 eng.index_id(pid, "cedula", c["cedula"])
         elif r["table"] == "transacciones" and owner:
-            eng.id_index.setdefault(("key", c.get("tx_id", "")), set()).add(next(iter(owner)))
+            eng.index_id(next(iter(owner)), "key", c.get("tx_id", ""))
 
     # chat users -> registry persons
     ambiguous: dict[str, set[str]] = {}
@@ -301,13 +314,22 @@ def process_doc(eng: Engine, d: dict) -> dict:
     }
 
 
-def process_chat(eng: Engine, m: dict, threads: dict) -> dict:
+def chat_context(eng: Engine, m: dict, threads: dict) -> tuple[str | None, set[str], str | None]:
+    """(author pid, persons in the thread, the thread's customer) for a corpus message."""
     near, owner = thread_context(eng, threads.get(m["thread_id"], {"users": []}))
     author_pid = eng.resolve_pid(f"u:{m['_user']}") if m.get("_user") else None
     if author_pid not in eng.persons:
         author_pid = None
     if author_pid and eng.persons[author_pid].kind in ("customer", "user"):
         owner = author_pid
+    return author_pid, near, owner
+
+
+def process_chat(eng: Engine, m: dict, threads: dict) -> dict:
+    return render_chat(eng, m, *chat_context(eng, m, threads))
+
+
+def render_chat(eng: Engine, m: dict, author_pid: str | None, near: set[str], owner: str | None) -> dict:
     rtext = " ".join([m.get("text", "")] + [a.get("filename", "") for a in m.get("attachments", [])])
     ctx = Ctx(record_id=m["id"], author=author_pid, owner=owner, near=near, record_text=rtext)
     author = m.get("author", "")
@@ -327,6 +349,32 @@ def process_chat(eng: Engine, m: dict, threads: dict) -> dict:
         "text": eng.anonymize_text(m.get("text", ""), ctx),
         "attachments": [{"filename": eng.anonymize_text(a.get("filename", ""), fctx)} for a in m.get("attachments", [])],
     }
+
+
+def _name_key(name: str) -> str:
+    return " ".join(norm(name).split())
+
+
+def capture_chat_context(eng: Engine, chats: list[dict], threads: dict) -> None:
+    """Remember, per thread, who took part and who its customer is, and which person each
+    author name was, so live /anonymize resolves a message exactly as the full run did."""
+    eng.threads = {}
+    for tid, t in threads.items():
+        near, owner = thread_context(eng, t)
+        eng.threads[tid] = {"near": sorted(near), "owner": owner}
+    eng.authors = {}
+    by_name: dict[str, set[str]] = {}
+    for m in chats:
+        if m.get("_is_bot") or not m.get("author"):
+            continue
+        author_pid, _, _ = chat_context(eng, m, threads)
+        name = _name_key(m["author"])
+        eng.authors[f"{m['thread_id']}\x1f{name}"] = author_pid or ""
+        if author_pid:
+            by_name.setdefault(name, set()).add(author_pid)
+    for name, pids in by_name.items():
+        if len(pids) == 1:  # a homonym is only resolved through its thread
+            eng.authors[f"*\x1f{name}"] = next(iter(pids))
 
 
 # --------------------------------------------------------------- entities ---
@@ -412,6 +460,7 @@ def anonymize_corpus(corpus, state_dir: Path, progress: Callable[[dict], None] =
     docs = [process_doc(eng, d) for d in corpus.docs]
     progress({"stage": "docs", "done": len(docs)})
     chats = [process_chat(eng, m, threads) for m in corpus.chats]
+    capture_chat_context(eng, corpus.chats, threads)
     progress({"stage": "chats", "done": len(chats)})
     entity_ids = dict(prev.get("entity_ids", {})) if prev else {}
     entities, leaks = build_entities(eng, chats + docs + tables, entity_ids)
@@ -452,7 +501,7 @@ def run_pipeline(sources_url: str, token: str, out_dir: Path, state_dir: Path,
 
 def _live_engine(state_dir: Path) -> tuple[Engine, dict]:
     f = Path(state_dir) / STATE_FILE
-    mtime = f.stat().st_mtime if f.exists() else 0
+    mtime = (str(f), f.stat().st_mtime if f.exists() else 0)  # which state file, and which version
     if _LIVE_CACHE.get("mtime") != mtime:
         state = load_state(Path(state_dir))
         eng = engine_from_state(state)
@@ -460,6 +509,54 @@ def _live_engine(state_dir: Path) -> tuple[Engine, dict]:
         _reserve_real_values(eng)
         _LIVE_CACHE.update({"mtime": mtime, "engine": eng, "entity_ids": dict(state.get("entity_ids", {}))})
     return _LIVE_CACHE["engine"], _LIVE_CACHE["entity_ids"]
+
+
+def _live_chat_context(eng: Engine, r: dict, is_bot: bool) -> tuple[str | None, set[str], str | None]:
+    """The context the full run used for this message: the thread's participants and
+    customer, and the author it resolved (by thread, then by unambiguous name)."""
+    tid, author = r.get("thread_id", ""), r.get("author", "")
+    t = eng.threads.get(tid, {})
+    near = {eng.resolve_pid(p) for p in t.get("near", [])}
+    owner = eng.resolve_pid(t["owner"]) if t.get("owner") else None
+    pid = None
+    if author and not is_bot:
+        name = _name_key(author)
+        if f"{tid}\x1f{name}" in eng.authors:
+            pid = eng.authors[f"{tid}\x1f{name}"] or None
+        elif f"*\x1f{name}" in eng.authors:
+            pid = eng.authors[f"*\x1f{name}"]
+        else:  # an author the full run never saw
+            cands = eng.candidates_by_name(author)
+            pid = eng.pick(cands, Ctx(record_id=r["id"], owner=owner, near=near), r.get("text", "")) if cands else None
+            if pid is None:
+                pid = f"x:name:{name}"
+                if pid not in eng.persons:
+                    eng.add_person(pid, "external", author)
+        pid = eng.resolve_pid(pid) if pid else None
+        if pid not in eng.persons:
+            pid = None
+    near = {p for p in near | ({pid} if pid else set()) if p in eng.persons}
+    # as in the full run, a customer writing is the record's owner; so is a person live has
+    # just met (kind "external"), whose own identifiers in the message belong to them
+    if pid and eng.persons[pid].kind in ("customer", "user", "external"):
+        owner = pid
+    return pid, near, owner
+
+
+def _register_live_row(eng: Engine, r: dict) -> None:
+    """A clientes/empleados row the last run never saw: register its person first, so it
+    gets its own pseudonym (two new homonyms get two) and its identifiers are replaced."""
+    c = r.get("columns", {})
+    key = c.get("cliente_id") if r.get("table") == "clientes" else c.get("id") if r.get("table") == "empleados" else ""
+    if not key or eng.id_index.get(("key", key)):
+        return
+    pid = register_table_row(eng, r)
+    if pid:
+        p = eng.persons[pid]
+        eng.f.add_blocked(fakes.normalize_token(t) for w in p.given + p.surnames for t in w.split())
+        for kind, vals in p.ids.items():
+            if kind in _RESERVED_KINDS:
+                eng.f.reserve(kind, vals)
 
 
 def anonymize_live(source: str, records: list[dict], state_dir: Path) -> dict:
@@ -473,27 +570,14 @@ def anonymize_live(source: str, records: list[dict], state_dir: Path) -> dict:
         out = []
         for r in records:
             if source == "tables":
+                _register_live_row(eng, r)
                 out.append(process_table_row(eng, r))
             elif source == "docs":
                 out.append(process_doc(eng, {**r, "metadata": r.get("metadata", {})}))
             else:
-                author = r.get("author", "")
-                cands = eng.candidates_by_name(author) if author else set()
-                pid = eng.pick(cands, Ctx(record_id=r["id"]), r.get("text", "")) if cands else None
-                if pid is None and author and author.lower() != "kipi":
-                    pid = f"x:name:{' '.join(norm(author).split())}"
-                    if pid not in eng.persons:
-                        eng.add_person(pid, "external", author)
-                m = {**r, "_user": None, "_is_bot": author.lower() == "kipi"}
-                near = {pid} if pid else set()
-                ctx = Ctx(record_id=r["id"], author=pid, owner=pid, near=near)
-                rec = process_chat(eng, m, {})
-                if pid:
-                    p = eng.persons[pid]
-                    rec["author"] = eng.pname(p)["short"]
-                    eng.note(p, r["id"], author, "name", rec["author"])
-                rec["text"] = eng.anonymize_text(r.get("text", ""), ctx)
-                out.append(rec)
+                is_bot = r.get("author", "").lower() == "kipi"
+                m = {**r, "_user": None, "_is_bot": is_bot}
+                out.append(render_chat(eng, m, *_live_chat_context(eng, r, is_bot)))
         ents, _ = build_entities(eng, out, entity_ids)
         ents = [e for e in ents if e.get("type") == "person"]
         # No state write here: a full run may be writing state.json from another process.
