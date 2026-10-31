@@ -99,3 +99,39 @@ def test_the_new_clues_are_read_for_linking_only():
     assert eng.evidence(text) == set()  # record processing does not read them
     assert eng.evidence_among(text, {"cl:CL-90001", "cl:CL-90002"}) == {"cl:CL-90002"}
 
+
+SAMPLE = Path(__file__).resolve().parents[1] / "data" / "sample" / "input"
+
+
+@pytest.mark.skipif(not SAMPLE.exists(), reason="sample corpus not present")
+def test_a_user_split_in_an_earlier_run_folds_into_the_customer_who_keeps_its_pseudonym(tmp_path):
+    from anon.core import pipeline as P
+    from anon.parse import load_corpus
+
+    def corpus(*texts: str):
+        c = load_corpus(SAMPLE)
+        for row in (LIZCANO, dict(VELEZ, nombre_completo=LIZCANO["nombre_completo"])):  # two true homonyms
+            c.tables.append({"id": f"clientes:{row['cliente_id']}", "table": "clientes", "columns": row})
+        c.users["UTEST01"] = {"id": "UTEST01", "team_id": "T0", "name": "renata.o", "real_name": LIZCANO["nombre_completo"],
+                              "is_bot": False, "is_restricted": False, "tz": "America/Bogota",
+                              "profile": {"title": "Cliente", "real_name": LIZCANO["nombre_completo"], "display_name": "renata.o"}}
+        for i, t in enumerate(texts):
+            c.chats.append({"id": f"m-test-{i}", "thread_id": "t-test", "author": LIZCANO["nombre_completo"],
+                            "ts": f"1700000000.00010{i}", "text": t, "attachments": [], "_user": "UTEST01",
+                            "_channel": "soporte-test", "_is_bot": False, "_mentions": [], "_deleted_user": False})
+        return c
+
+    def owner_of(entities, rec):
+        return next(e for e in entities if not e.get("kept") and rec in e["records"])
+
+    eng, ids, *_, before, _ = P.anonymize_corpus(corpus("hola, necesito ayuda con la tarjeta"), tmp_path)
+    P.save_state(tmp_path, eng, ids)
+    customer = owner_of(before, "clientes:CL-90001")
+    split = owner_of(before, "m-test-0")
+    assert split["entity_id"] != customer["entity_id"]  # run 1: undecided, the user is its own identity
+    # run 2: the thread gains the last four digits of the cédula, so the user is linked
+    *_, after, _ = P.anonymize_corpus(corpus("hola, necesito ayuda con la tarjeta", "los últimos 4: 5678"), tmp_path)
+    now = owner_of(after, "clientes:CL-90001")
+    assert now["entity_id"] == customer["entity_id"]
+    assert now["pseudonyms"]["name"] == customer["pseudonyms"]["name"]  # the anchored identity keeps its pseudonym
+    assert {"m-test-0", "m-test-1"} <= set(now["records"])

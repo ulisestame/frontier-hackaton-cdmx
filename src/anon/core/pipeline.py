@@ -184,9 +184,11 @@ def build_registry(eng: Engine, corpus) -> dict:
         real = u.get("real_name") or prof.get("real_name") or u.get("name", "")
         email = (prof.get("email") or "").strip()
         upid = f"u:{uid}"
-        cands = set(eng.id_index.get(("email", canon("email", email)), set())) if email else set()
+        # A state from an earlier run may already hold this user as a person of its own: that
+        # earlier identity is not a candidate (with it, a lone real match looked ambiguous).
+        cands = set(eng.id_index.get(("email", canon("email", email)), set())) - {upid} if email else set()
         if not cands and real:
-            cands = eng.candidates_by_name(real)
+            cands = eng.candidates_by_name(real) - {upid}
             # A homonym on the other side of the counter is someone else: a "Cliente" profile or a
             # personal e-mail is not an employee, and a company e-mail is not a customer.
             staff = email.lower().endswith("@kipupay.co")
