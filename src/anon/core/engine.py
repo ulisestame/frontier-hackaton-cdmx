@@ -640,7 +640,8 @@ class Engine:
     def _is_kept_at(self, text, start, end) -> bool:
         window = norm(text[max(0, start - 25):min(len(text), end + 25)])
         surf = norm(text[start:end])
-        return any(k in window and surf in k for k in _KEPT_NORM if len(k) > len(surf))
+        # >= : a mention that IS a kept term ("Juan Valdez") is kept too, not only a part of one
+        return any(k in window and surf in k for k in _KEPT_NORM if len(k) >= len(surf))
 
     def _unknown_name(self, text, toks, i, ctx):
         s0, e0, raw0, n0 = toks[i]
@@ -657,6 +658,13 @@ class Engine:
             j += 1
         if len(words) < 2 or all(is_given(w) for w in words):
             return None
+        # A kept term opening the span ("<brand> <barrio>" in a purchase description) is not a
+        # person: registering the longer span would turn every later mention of the brand into one.
+        for n in range(len(words), 1, -1):
+            if " ".join(norm(w) for w in words[:n]) in _KEPT_NORM:
+                lead = text[s0:toks[i + n - 1][1]]
+                self.kept_seen.setdefault(lead, set()).add(ctx.record_id)
+                return None
         start, end = s0, toks[j - 1][1]
         surf = text[start:end]
         if norm(surf) in _KEPT_NORM or self._is_kept_at(text, start, end):
