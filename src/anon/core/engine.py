@@ -78,6 +78,7 @@ ACCOUNT_RX = re.compile(
     r"(?:[^\d\n.;]|\.(?!\s)){0,40}?"  # "cuenta de Bancolombia? Es la ...": a short bridge, same sentence
     r"[:#]?\s*(\d(?:[ .-]?\d){5,18})(?![\d])(?!\s*(?:pesos|cop|mil|millones)\b)")
 OBLIGATION_RX = re.compile(r"\d{4}-\d{4}")
+INITIAL_SURNAME_RX = re.compile(r"(?<![\w.])([A-ZÁÉÍÓÚÑ])\.\s?([A-ZÁÉÍÓÚÑ][a-záéíóúñü]{2,})(?!\w)")
 IPV4_RX = re.compile(r"(?<![\d.])((?:25[0-5]|2[0-4]\d|1?\d?\d)(?:\.(?:25[0-5]|2[0-4]\d|1?\d?\d)){3})(?![\d]|\.\d)")
 PLATE_RX = re.compile(r"(?<![A-Za-z0-9])([A-Z]{3})([- ]?)(\d{3}|\d{2}[A-Z])(?![A-Za-z0-9])")
 PLATE_STOP = {"USD", "COP", "EUR", "MXN", "PQR", "INC", "CEO", "CTO", "CFO", "COO", "SOAT", "API", "PDF", "IVA", "GMF"}
@@ -273,6 +274,7 @@ class Ctx:
 class Engine:
     def __init__(self, factory: "fakes.PseudonymFactory"):
         self.f = factory
+        self.initials_left: list[tuple[str, str, int]] = []  # (record, "A. Apellido", candidates)
         self.persons: dict[str, Person] = {}
         self.alias: dict[str, str] = {}
         self.name_index: dict[str, list[tuple[tuple[str, ...], int, int, str]]] = {}
@@ -817,7 +819,38 @@ class Engine:
             add(m.start(), m.end(), val, "handle", p, m.group(), "handle", val)
         # names
         spans.extend(self.find_names(text, ctx))
+        spans.extend(self.find_initials(text, ctx))
         return self._resolve_overlaps(spans)
+
+    def find_initials(self, text: str, ctx: Ctx):
+        """'A. Apellido': rendered as the pseudonym's initial and surname when exactly one known
+        person has that initial and that first surname. Otherwise the text is left alone and the
+        case is listed in ``initials_left``."""
+        spans = []
+        for m in INITIAL_SURNAME_RX.finditer(text):
+            ini, sur = norm(m.group(1)), norm(m.group(2))
+            if sur in fakes.NON_NAME_WORDS:
+                continue
+            cands = set()
+            for pid, p in self.persons.items():
+                if p.surnames and p.given and norm(p.surnames[0]) == sur and norm(p.given[0])[:1] == ini:
+                    cands.add(self.resolve_pid(pid))
+            cands.discard(None)
+            if len(cands) != 1:
+                self.initials_left.append((ctx.record_id, m.group(0), len(cands)))
+                continue
+            p = self.persons[next(iter(cands))]
+            pn = self.pname(p)
+            start, end, ns = m.start(), m.end(), 1
+            nxt = re.match(r"\s+([A-ZÁÉÍÓÚÑ][a-záéíóúñü]+)", text[end:])
+            if nxt and len(p.surnames) > 1 and norm(nxt.group(1)) == norm(p.surnames[1]):
+                end, ns = end + nxt.end(), 2  # "A. Apellido Segundo"
+            sep = ". " if re.search(r"\.\s", m.group(0)) else "."
+            repl = f"{pn['given'][0][0]}{sep}{' '.join(pn['surnames'][:ns])}"
+            surf = text[start:end]
+            spans.append((start, end, repl, "name", p.pid, surf))
+            self.note(p, ctx.record_id, surf, "name", repl)
+        return spans
 
     def _resolve_overlaps(self, spans):
         spans.sort(key=lambda s: (s[0], -(s[1] - s[0])))
