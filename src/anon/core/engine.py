@@ -9,6 +9,7 @@ Everything unknown that looks personal is replaced (fail-closed), never left raw
 
 from __future__ import annotations
 
+import datetime as _dt
 import re
 from dataclasses import dataclass, field
 
@@ -138,6 +139,14 @@ class Person:
     def add_id(self, kind: str, value: str) -> None:
         if value:
             self.ids.setdefault(kind, set()).add(value)
+
+
+def _valid_iso(s: str) -> bool:
+    try:
+        _dt.date.fromisoformat(s)
+        return True
+    except ValueError:
+        return False
 
 
 def canon(kind: str, value: str) -> str:
@@ -442,16 +451,30 @@ class Engine:
             val = self.pseudo("address", p, surf)
             add(m.start(), m.start() + len(surf), val, "address", p, surf, "address", val)
         # birth dates known in the registry
-        for rx in (ISO_DATE_RX, SLASH_DATE_RX):
-            for m in rx.finditer(text):
-                iso = m.group() if rx is ISO_DATE_RX else f"{m.group(3)}-{m.group(2)}-{m.group(1)}"
-                pids = self.id_index.get(("birth", iso), set())
-                if not pids:
-                    continue
-                p = self.person(self.pick(pids, ctx, text))
-                val = self.pseudo("birth", p, iso)
-                out = val if rx is ISO_DATE_RX else f"{val[8:10]}/{val[5:7]}/{val[0:4]}"
-                add(m.start(), m.end(), out, "birth", p, m.group(), "birth_iso", val)
+        for m in ISO_DATE_RX.finditer(text):
+            pids = self.id_index.get(("birth", m.group()), set())
+            if not pids:
+                continue
+            p = self.person(self.pick(pids, ctx, text))
+            val = self.pseudo("birth", p, m.group())
+            add(m.start(), m.end(), val, "birth", p, m.group(), "birth_iso", val)
+        # Slash dates: Spanish text writes day first, the English documents month first
+        # ("DOB 03/26/1984"), so try both readings against the registry. When both are
+        # someone's birth date, a person in this record's context wins, then day first.
+        context = {self.resolve_pid(x) for x in [ctx.author, ctx.owner, *ctx.near] if x}
+        for m in SLASH_DATE_RX.finditer(text):
+            a, b, y = m.group(1), m.group(2), m.group(3)
+            cands = [(iso, dayfirst) for iso, dayfirst in ((f"{y}-{b}-{a}", True), (f"{y}-{a}-{b}", False))
+                     if _valid_iso(iso) and self.id_index.get(("birth", iso))]
+            if not cands:
+                continue
+            cands.sort(key=lambda c: not ({self.resolve_pid(x) for x in self.id_index[("birth", c[0])]} & context))
+            iso, dayfirst = cands[0]
+            p = self.person(self.pick(self.id_index[("birth", iso)], ctx, text))
+            val = self.pseudo("birth", p, iso)
+            # same factory key as pseudo() -> same shifted date, written in the original layout
+            out = self.f.birth(f"{p.pid}:{canon('birth', iso)}", m.group(), dayfirst=dayfirst)
+            add(m.start(), m.end(), out, "birth", p, m.group(), "birth_iso", val)
         # handles (chat usernames, pqrs agents)
         for m in re.finditer(r"(?<![\w.-])[a-z][a-z0-9]*(?:[._][a-z0-9]+)*(?![\w@-]|\.\w)", text):
             pids = self.id_index.get(("handle", m.group().lower()), set())
@@ -600,7 +623,8 @@ class Engine:
         out.append(text[pos:])
         result = "".join(out)
         self.collect_kept(text, ctx.record_id)
-        return self.generalize_quasi(result)
+        owner = self.persons.get(self.resolve_pid(ctx.owner)) if ctx.owner else None
+        return self.generalize_quasi(result, owner.city if owner else "")
 
     def collect_kept(self, text: str, rec_id: str) -> None:
         nt = norm(text)
@@ -609,8 +633,11 @@ class Engine:
             if len(k) >= 4 and re.search(rf"(?<![a-z0-9]){re.escape(k)}(?![a-z0-9])", nt):
                 self.kept_seen.setdefault(term, set()).add(rec_id)
 
-    def generalize_quasi(self, text: str) -> str:
-        """Occupation + barrio + year in a self-description: generalize all three."""
+    def generalize_quasi(self, text: str, city: str = "") -> str:
+        """Occupation + barrio + year in a self-description: generalize all three.
+
+        city is the record owner's city, used for barrios that exist in several cities
+        (Castilla: Medellín and Bogotá; Boston: Medellín and Barranquilla)."""
         # One precompiled alternation (longest term first) instead of one regex per term:
         # the per-term loop recompiled ~1,000 patterns per text (the re cache holds 512).
         # Spans are found on the original text and replaced right-to-left, so a sector
@@ -622,7 +649,8 @@ class Engine:
         out = text
         for m in reversed(spans):
             out = out[:m.start()] + fakes.occupation_sector(m.group()) + out[m.end():]
-        for barrio_norm, city in fakes.CITY_OF_BARRIO.items():
+        home = fakes.canonical_city(city) if city else ""
+        for barrio_norm, barrio_city in list(fakes.CITY_OF_BARRIO.items()):
             if len(barrio_norm) < 4:
                 continue
             for m in re.finditer(r"[^\W\d_]+(?:\s+[^\W\d_]+){0,3}", out):
@@ -631,6 +659,7 @@ class Engine:
             plain = strip_accents(out)
             m = rx.search(plain)
             if m and out[m.start():m.end()][:1].isupper():
-                out = out[:m.start()] + city + out[m.end():]
+                cities = fakes.CITIES_OF_BARRIO.get(barrio_norm, [barrio_city])
+                out = out[:m.start()] + (home if home in cities else barrio_city) + out[m.end():]
         out = YEAR_RX.sub("hace unos años", out, count=1) if re.search(r"(?i)\b(?:en|desde|año)\s+(?:19|20)\d{2}\b", out) else out
         return out
