@@ -68,6 +68,13 @@ SPELLED_EMAIL_RX = re.compile(
 PHONE_RX = re.compile(r"(?<![\d+])(?:\+?57[\s.-]?)?\(?3\d{2}\)?[\s.-]?\d{3}[\s.-]?\d{2}[\s.-]?\d{2}(?!\d)")
 NUMBER_RX = re.compile(r"(?<![\d.,])(\d{1,3}(?:[.\s]\d{3}){1,3}|\d{6,10})(?![\d]|[.,]\d)")
 ID_CUE = re.compile(r"(?i)(?:\bc\.?\s?c\.?|c[ée]dula|documento|identificaci[oó]n|\bc\.?e\.?\b|\bnit\b|\bt\.?i\.?\b|\bid\b|n[uú]mero de identificaci[oó]n)[\s:#.,n°ºo]*(?:es\s+|del\s+titular\s+|:)?\s*$")
+# Bank accounts and card numbers after a cue ("cuenta de ahorros 0123 4567 890", "tarjeta 4111-...").
+# 9+ digits only: last-4 mentions ("terminada en 7777") and 8-digit obligation numbers stay.
+ACCOUNT_RX = re.compile(
+    r"(?i)(?:\bcuenta|\bcta\.?|\bahorros|\bcorriente|\btarjeta|\btc\b|\bd[ée]bito|\bcr[ée]dito|\baccount|\bcard)"
+    r"(?:[^\d\n.]|\.(?!\s)){0,40}?"  # "cuenta de Bancolombia? Es la ...": a short bridge, same sentence
+    r"[:#]?\s*(\d(?:[ .-]?\d){8,18})(?![\d])(?!\s*(?:pesos|cop|mil|millones)\b)")
+IPV4_RX = re.compile(r"(?<![\d.])((?:25[0-5]|2[0-4]\d|1?\d?\d)(?:\.(?:25[0-5]|2[0-4]\d|1?\d?\d)){3})(?![\d]|\.\d)")
 PLATE_RX = re.compile(r"(?<![A-Za-z0-9])([A-Z]{3})([- ]?)(\d{3}|\d{2}[A-Z])(?![A-Za-z0-9])")
 PLATE_STOP = {"USD", "COP", "EUR", "MXN", "PQR", "INC", "CEO", "CTO", "CFO", "COO", "SOAT", "API", "PDF", "IVA", "GMF"}
 PASSPORT_RX = re.compile(r"(?i)(?:pasaporte|passport)(?:\s+(?:n[°ºo.]*|number|no\.?|is|es|n[uú]mero))*\s*[:#]?\s*([A-Z]{1,3}\d{6,8})\b")
@@ -715,6 +722,24 @@ class Engine:
                 self.index_id(p.pid, kind, d)
             val = self.pseudo(kind, p, d)
             add(m.start(1), m.end(1), fakes.format_like(surf, val), kind, p, surf, kind, val)
+        # bank accounts / card numbers (cue + 9-19 digits, any grouping)
+        for m in ACCOUNT_RX.finditer(text):
+            surf = m.group(1)
+            d = only_digits(surf)
+            if (len(d) == 10 and d.startswith("3")) or self.id_index.get(("cedula", d)):
+                continue  # a phone or a known cédula: handled by their own detectors
+            pids = self.id_index.get(("account", d), set())
+            p = self.person(self.pick(pids, ctx, text)) if pids else self.owner_for_unknown(ctx, "account", d)
+            if not pids:
+                self.index_id(p.pid, "account", d)
+            val = self.pseudo("account", p, d)
+            add(m.start(1), m.end(1), fakes.format_like(surf, val), "account", p, surf, "account", val)
+        # IPv4 addresses
+        for m in IPV4_RX.finditer(text):
+            ip = m.group(1)
+            p = self.owner_for_unknown(ctx, "ip", ip)
+            fake = self.f.ip(ip)
+            add(m.start(1), m.end(1), fake, "ip", p, ip, "ip", fake)
         # plates
         for m in PLATE_RX.finditer(text):
             if m.group(1) in PLATE_STOP:

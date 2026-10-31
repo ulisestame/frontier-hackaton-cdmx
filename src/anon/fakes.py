@@ -1156,6 +1156,16 @@ class PseudonymFactory:
             self.taken["phone"].add(val)
         return format_like(original, prefix + val)
 
+    def ip(self, original: str) -> str:
+        """Deterministic public-looking IPv4 for a real one (same IP, same fake)."""
+        for attempt in range(_MAX_ATTEMPTS):
+            r = self._rand("ip", original, attempt)
+            first = r.choice([o for o in range(11, 224) if o not in (100, 127, 169, 172, 192)])
+            out = ".".join(str(x) for x in [first] + [r.choice(list(range(1, 255))) for _ in range(3)])
+            if out != original:
+                return out
+        raise RuntimeError("could not build a fake IP")
+
     def account(self, key: str, original: str) -> str:
         """Same digit count and separators, first digit kept, the rest changed; 13-19 digit
         numbers starting with 3/4/5/6 (cards) come out Luhn-valid. Masks such as '****' stay."""
