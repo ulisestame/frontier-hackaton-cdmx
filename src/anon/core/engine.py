@@ -590,14 +590,6 @@ class Engine:
             out |= self.id_index.get(("cedula", d), set()) | self.id_index.get(("phone", d), set())
         for m in TABLE_KEY_RX.finditer(text):
             out |= self.id_index.get(("key", m.group()), set())
-        for m in SPELLED_EMAIL_RX.finditer(text):
-            out |= self.id_index.get(("email", spelled_email(m.group(1), m.group(2))), set())
-        for d in dates_in(text):
-            out |= self.id_index.get(("birth", d), set())
-        if "#" in text or "-" in text:
-            addresses = self.addresses()
-            for m in ADDRESS_RX.finditer(text):
-                out |= addresses.get(address_key(m.group()), set())
         return {self.resolve_pid(p) for p in out}
 
     def addresses(self) -> dict[str, set[str]]:
@@ -610,11 +602,22 @@ class Engine:
         return self._addr_index
 
     def evidence_among(self, text: str, cands: set[str]) -> set[str]:
-        """Softer clues that only make sense inside a known set of homonyms: a transaction's date
-        and amount, the last four digits of a cédula or phone ("termina en 4821"), or the full
-        name with both surnames (an attachment like "extracto_ana_ruiz_mora.pdf")."""
+        """Clues read only to tell a chat user's homonyms apart (never in record processing): an
+        e-mail spelled with "punto" and "arroba", a full date equal to a birth date, an address
+        in any spelling, a transaction's date and amount, the last four digits of a cédula or
+        phone ("termina en 4821"), or the full name with both surnames (an attachment like
+        "extracto_ana_ruiz_mora.pdf")."""
         cands = {self.resolve_pid(c) for c in cands}
-        out = self.tx_evidence(text) & cands
+        found: set[str] = set()
+        for m in SPELLED_EMAIL_RX.finditer(text):
+            found |= self.id_index.get(("email", spelled_email(m.group(1), m.group(2))), set())
+        for d in dates_in(text):
+            found |= self.id_index.get(("birth", d), set())
+        if "#" in text or "-" in text:
+            addresses = self.addresses()
+            for m in ADDRESS_RX.finditer(text):
+                found |= addresses.get(address_key(m.group()), set())
+        out = ({self.resolve_pid(p) for p in found} | self.tx_evidence(text)) & cands
         undated = text  # the year of a date ("de 1998", "desde 1998") is not a tail
         for rx in (ISO_DATE_RX, SLASH_DATE_RX, BIRTH_LONG_RX, YEAR_CTX_RX):
             undated = rx.sub(" ", undated)

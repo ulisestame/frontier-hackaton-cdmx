@@ -5,6 +5,7 @@ Every name, number and address here is invented.
 
 from __future__ import annotations
 
+from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
@@ -90,3 +91,11 @@ def test_two_users_left_with_the_same_homonym_stay_unlinked():
     eng = _registry(users, _thread("U1", "hola") + _thread("U2", "buenas") + _thread("U3", "hola"))
     assert eng.resolve_pid("u:U2") == "u:U2"  # both left with the same homonym: neither is decided
     assert eng.resolve_pid("u:U3") == "u:U3"
+
+
+def test_the_new_clues_are_read_for_linking_only():
+    eng = _registry({}, [])
+    text = "La tarjeta va a la cra 80 #9-12; nació el 23 de noviembre de 1984."
+    assert eng.evidence(text) == set()  # record processing does not read them
+    assert eng.evidence_among(text, {"cl:CL-90001", "cl:CL-90002"}) == {"cl:CL-90002"}
+
