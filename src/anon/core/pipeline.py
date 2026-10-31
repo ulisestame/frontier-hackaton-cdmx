@@ -291,6 +291,14 @@ def process_table_row(eng: Engine, r: dict) -> dict:
                         "fecha_nacimiento": "birth"}[k]
                 out[k] = ident(kind, v)
                 continue
+            if k == "reporta_a" and v:
+                # The boss is a colleague: a customer who shares the short name must not take
+                # the relation. Resolved among employees only, rendered like any mention of them.
+                bosses = {b for b in eng.candidates_by_name(v) if b in eng.persons and eng.persons[b].kind == "employee"}
+                if len(bosses) == 1:
+                    boss = next(iter(bosses))
+                    out[k] = eng.anonymize_text(v, Ctx(record_id=rid, owner=boss, near={boss}, record_text=v))
+                    continue
             if k in ("id", "cargo", "ciudad", "ingreso") or k.endswith("_tipo"):
                 out[k] = v
                 continue
