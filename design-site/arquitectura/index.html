@@ -447,24 +447,25 @@
 </g>
 </svg>
 </div>
-<figcaption class="note">Un solo contenedor sirve los seis endpoints bajo /v1 y corre el pipeline como un proceso aparte; un disco persistente (/data) guarda state.json, una carpeta de salida por corrida con su puntero CURRENT y el estado de cada job. La rama de IA, en trazo discontinuo, es el siguiente paso: la v1 funciona solo con reglas. Las etiquetas D1–D5 remiten a las decisiones de abajo.</figcaption>
+<figcaption class="note">Un solo contenedor sirve los seis endpoints bajo /v1 y corre el pipeline en un proceso aparte; un volumen persistente (/data) guarda state.json con una instantánea por corrida, una carpeta de salida por corrida con su puntero CURRENT, el estado de cada job y la copia cruda de las fuentes. La Rama de IA, en trazo discontinuo, es el siguiente paso: hoy todo es código. Las etiquetas D1–D5 remiten a las decisiones de abajo.</figcaption>
 </figure>
 </div>
 <div class="wrap">
 <section class="sec" id="etapas">
   <div class="sec-head"><h2>Etapas del pipeline</h2><a class="path" href="#etapas">/arquitectura/#etapas</a></div>
   <ol class="listing labeled">
-    <li><span class="n">1</span><span><b>Ingesta + huella de esquema.</b> Descarga mensajes, documentos y tablas de la API de fuentes y compara su esquema y su <code>record_index</code> con los de la corrida anterior.</span></li>
-    <li><span class="n">2</span><span><b>Normalización por fuente.</b> Texto por registro; en documentos también metadatos PDF, comentarios HTML y menciones Slack.</span></li>
-    <li><span class="n">3</span><span><b>Bóveda de identidades.</b> Las tablas primero: cada persona recibe un <code>persona_id</code> con todas sus formas de superficie.</span></li>
-    <li><span class="n">4a</span><span><b>Rama de código.</b> Reglas, validadores (cédula, NIT con DV, +57, correos con «arroba/punto», placas, pasaportes, Luhn, Slack) y búsqueda en la bóveda: la mayor parte del volumen.</span></li>
-    <li class="is-ia"><span class="n">4b</span><span><b>Rama de IA (siguiente paso).</b> La v1 funciona solo con reglas. Después, un LLM pequeño clasificaría solo el residuo ambiguo (persona, organización, lugar o figura pública, y el género), con caché y fail-closed; sus decisiones se guardarían como reglas.</span></li>
-    <li><span class="n">5</span><span><b>Resolución de entidades.</b> Cada mención se asigna a un <code>persona_id</code> por evidencia; dos homónimos quedan como personas distintas.</span></li>
-    <li><span class="n">6</span><span><b>Seudónimos deterministas.</b> <code>HMAC(persona_id)</code> elige un reemplazo de la misma categoría, género, formato y estilo, siempre el mismo; el mapa vive en <code>state.json</code>, así quien ya estaba conserva su seudónimo cuando las fuentes crecen.</span></li>
-    <li><span class="n">7</span><span><b>Cuasi-identificadores.</b> k-anonimato: se generalizan combinaciones raras (k &lt; 5), como barrio + ocupación + año.</span></li>
-    <li><span class="n">8</span><span><b>Reescritura por fragmentos.</b> Cada registro se reescribe conservando su id: salida 1:1 con la entrada.</span></li>
-    <li class="is-gate"><span class="n">9</span><span><b>Verificador de fugas.</b> Búsqueda inversa de la bóveda y re-escaneo; si encuentra algo vuelve a 8, si está limpio publica <code>output/&lt;job&gt;/</code> y mueve el puntero <code>CURRENT</code> de forma atómica.</span></li>
-    <li class="is-live"><span class="n">vivo</span><span><b>POST /anonymize.</b> Lotes de 50 en menos de 60 s: entra en 2, salta a 4 y reusa la bóveda (<code>state.json</code>) de la última corrida, así queda consistente con ella.</span></li>
+    <li><span class="n">1</span><span><b>Ingesta.</b> Descarga chats, documentos y tablas bajo un límite propio de 500 peticiones/min, con reintentos ante 429 y 5xx, en una carpeta temporal que se mueve de forma atómica. Al final re-chequea <code>record_index</code> con ETag y, si las fuentes crecieron durante la descarga, descarga de nuevo.</span></li>
+    <li><span class="n">2</span><span><b>Normalización.</b> Chats, documentos (md, html, pdf → markdown con su metadata) y tablas (CSV y XML) al esquema de salida; los ids se concilian con <code>record_index</code>.</span></li>
+    <li><span class="n">3</span><span><b>Registro de personas.</b> Las tablas primero: clientes, empleados y perfiles de chat con sus identificadores duros. Un cliente migrado con id nuevo se une a uno existente solo si su cédula coincide con exactamente uno.</span></li>
+    <li><span class="n">4a</span><span><b>Rama de código.</b> Reglas para nombres conocidos y desconocidos, correos (también deletreados), celulares, cédulas, direcciones, fechas de nacimiento, placas, pasaportes, tarjetas, cuentas, menciones, handles y slugs; una lista de términos conservados. Hoy procesa todo el volumen.</span></li>
+    <li class="is-ia"><span class="n">4b</span><span><b>Rama de IA (siguiente paso, no construida).</b> Un modelo pequeño clasificaría solo el residuo ambiguo (persona, organización, lugar o figura pública, y el género), con caché y fail-closed; sus decisiones se guardarían como reglas.</span></li>
+    <li><span class="n">5</span><span><b>Vinculación.</b> Cada mención → persona: autor, dueño del registro, participantes del hilo y evidencia dura (correo, cédula, celular, llave); si nada decide, regla determinista con advertencia. Prioridad y filtro por tipo de persona, pase de eliminación, evidencia ampliada y por línea, y desempates de homónimos <span class="tag en-curso">en curso</span>.</span></li>
+    <li><span class="n">6</span><span><b>Seudónimos deterministas.</b> Cada valor sale de HMAC-SHA256(secreto, persona), con la categoría, el género y el formato del original; los valores reales de todos se reservan. El mapa vive en <code>state.json</code>, así quien ya estaba conserva su seudónimo cuando las fuentes crecen.</span></li>
+    <li><span class="n">7</span><span><b>Cuasi-identificadores.</b> En la tabla de clientes, ocupación → sector y barrio → otro de la misma ciudad; en autodescripciones, ocupación, barrio y año se generalizan. En cualquier redacción y contra la fila maestra <span class="tag en-curso">en curso</span>.</span></li>
+    <li><span class="n">8</span><span><b>Reemplazo por fragmentos.</b> Se reemplaza, nunca se reescribe: el texto no personal queda idéntico y la salida es 1:1 con la entrada.</span></li>
+    <li class="is-gate"><span class="n">9</span><span><b>Autoverificación.</b> Busca cada forma real en toda la salida con la normalización del jurado. Un valor que sigue presente no se declara en <code>entities.json</code> y queda en <code>report.json</code>, porque el validador rechazaría la salida completa. Medido hoy: 0 valores en ambos corpus. Paso de reparación (reemplazar y volver a verificar) <span class="tag en-curso">en curso</span>.</span></li>
+    <li><span class="n">10</span><span><b>Publicación atómica.</b> Los 4 archivos van a una carpeta temporal que se renombra a <code>output/&lt;job&gt;/</code>; luego cambia el puntero <code>CURRENT</code>. <code>state.json</code> se escribe atómico y deja una instantánea por corrida.</span></li>
+    <li class="is-live"><span class="n">vivo</span><span><b>POST /anonymize.</b> Hasta 50 registros, 55 s máx. por lote (504). Usa el mismo <code>state.json</code> y el contexto de hilo de la corrida, así una persona ya vista recibe su seudónimo de <code>output/</code>; una persona nueva recibe uno nuevo, que vive en memoria hasta la próxima corrida.</span></li>
   </ol>
 </section>
 
@@ -474,21 +475,26 @@
   <table class="dec w-lg">
     <thead><tr><th>Decisión</th><th>Elegimos</th><th>Descartamos</th><th>Por qué</th></tr></thead>
     <tbody>
-      <tr><td><span class="dn">D1</span> Infraestructura</td><td data-label="Elegimos">Contenedor siempre encendido (Railway) + disco persistente (volumen <code>/data</code>)</td><td data-label="Descartamos">Laptop con túnel; funciones serverless</td><td data-label="Por qué">Una caída de la laptop o del túnel durante el debrief mata la corrida del set oculto. Las funciones serverless no tienen disco ni trabajo en segundo plano y tienen límite de duración; la regeneración completa debe terminar en menos de 2 h y sobrevivir a un reinicio.</td></tr>
-      <tr><td><span class="dn">D2</span> Uso del LLM</td><td data-label="Elegimos">v1 solo con reglas; después, LLM solo para el residuo ambiguo, con caché</td><td data-label="Descartamos">Todo-LLM</td><td data-label="Por qué">Según el enunciado, una solución sólida por reglas, sin modelos, ronda 88 de 100. El servicio paga sus propias llamadas (reserva de US$5) y un LLM no es determinista; el código es barato, repetible y testeable.</td></tr>
-      <tr><td><span class="dn">D3</span> Seudónimos</td><td data-label="Elegimos">Deterministas por <code>HMAC(persona_id)</code></td><td data-label="Descartamos">Aleatorios o marcadores <code>[NOMBRE]</code></td><td data-label="Por qué">La misma persona debe recibir el mismo seudónimo en todas las fuentes y entre corridas (el mapa vive en <code>state.json</code>), y el texto debe seguir sirviendo para entrenar.</td></tr>
-      <tr><td><span class="dn">D4</span> Identidad</td><td data-label="Elegimos">Tablas como ancla de identidad</td><td data-label="Descartamos">Agrupar por nombre</td><td data-label="Por qué">Hay clientes con el mismo nombre completo; el nombre solo no distingue personas.</td></tr>
-      <tr><td><span class="dn">D5</span> Lo desconocido</td><td data-label="Elegimos">Fail-closed: se trata como sensible hasta clasificarlo</td><td data-label="Descartamos">Dejar pasar lo desconocido</td><td data-label="Por qué">La fuga pesa 45 de 100 en la evaluación y la utilidad 35: ante la duda, se protege a la persona.</td></tr>
+      <tr><td><span class="dn">D1</span> Infraestructura</td><td data-label="Elegimos">Contenedor siempre encendido (Railway) + disco persistente (volumen <code>/data</code>)</td><td data-label="Descartamos">Laptop con túnel; funciones serverless</td><td data-label="Por qué">Si el servicio deja de responder durante una corrida, la corrida termina sin puntaje y cuenta como usada. Las funciones serverless no tienen disco ni trabajo en segundo plano y tienen límite de duración; la regeneración completa debe terminar en menos de 2 h y sobrevivir a un reinicio.</td></tr>
+      <tr><td><span class="dn">D2</span> Uso del LLM</td><td data-label="Elegimos">Reglas primero; la Rama de IA queda para el residuo ambiguo</td><td data-label="Descartamos">Todo-LLM · reescribir el texto con un modelo</td><td data-label="Por qué">Según el enunciado, una solución sólida por reglas ronda 88 de 100. Las nuestras pasan el validador y los tests públicos con 0 tokens. Un LLM no es determinista y reescribir pierde parecido con la salida ideal.</td></tr>
+      <tr><td><span class="dn">D3</span> Seudónimos</td><td data-label="Elegimos">Deterministas por HMAC + mapa persistido en <code>state.json</code></td><td data-label="Descartamos">Aleatorios o marcadores <code>[NOMBRE]</code></td><td data-label="Por qué">La misma persona debe recibir el mismo seudónimo en todas las fuentes y entre corridas, y el texto debe seguir sirviendo para entrenar.</td></tr>
+      <tr><td><span class="dn">D4</span> Identidad</td><td data-label="Elegimos">Tablas como ancla; fusión solo con coincidencia exacta de un identificador duro</td><td data-label="Descartamos">Agrupar por nombre, ciudad o cargo</td><td data-label="Por qué">Hay clientes con el mismo nombre completo; el nombre solo no distingue personas. Ante cualquier ambigüedad, no se fusiona.</td></tr>
+      <tr><td><span class="dn">D5</span> Lo desconocido</td><td data-label="Elegimos">Fail-closed: lo que parece personal y no se puede clasificar se reemplaza</td><td data-label="Descartamos">Dejar pasar lo desconocido</td><td data-label="Por qué">La fuga pesa 45 de 100 en la evaluación y la utilidad 35: ante la duda, se protege a la persona.</td></tr>
     </tbody>
   </table>
   </div>
+</section>
+
+<section class="sec" id="incidente">
+  <div class="sec-head"><h2>Incidente INC-PII-01</h2><a class="path" href="#incidente">/arquitectura/#incidente</a></div>
+  <p>A las 15:00 llegó el ticket "Kipu Pay compró Págalo" y a las 15:45:29 nuestro vigilante detectó que las fuentes crecieron. Antes de gastar una corrida, ensayamos sobre una réplica exacta del estado publicado. Con la corrección, 202 de 202 personas publicadas conservan su seudónimo y los 12 clientes migrados quedan unidos a su persona. Detalle en el <a href="/diseno/#incidente">doc de diseño</a>.</p>
 </section>
 
 <section class="sec" id="como-escala">
   <div class="sec-head"><h2>Cómo escala</h2><a class="path" href="#como-escala">/arquitectura/#como-escala</a></div>
   <p>El diseño liviano de hoy es una decisión, no un límite: alcanza para este corpus y cada pieza tiene un reemplazo claro cuando la carga lo pida, sin cambiar los contratos ni los seudónimos.</p>
   <ol class="track" aria-label="Cómo escala: hoy, cuándo cambiar y después">
-    <li class="st"><span class="st-k">Hoy</span><b class="mk store">Un contenedor + disco persistente</b><small><code>state.json</code> con un solo escritor por corrida, menos de 2 MB, cargado en memoria y escrito de forma atómica. Es lo justo para este corpus.</small></li>
+    <li class="st"><span class="st-k">Hoy</span><b class="mk store">Un contenedor + disco persistente</b><small><code>state.json</code> con un solo escritor por corrida, ~0,6 MB medido, cargado en memoria y escrito de forma atómica. Es lo justo para este corpus.</small></li>
     <li class="st"><span class="st-k">Cuándo cambiar</span><b>Cuando aparezca una de estas señales</b><small>varias réplicas o clientes escribiendo a la vez · millones de registros · consultas sobre los datos · requisitos de auditoría o retención</small></li>
     <li class="st st-wide"><span class="st-k">Después</span><b>Mismos contratos, piezas que escalan</b><small>PostgreSQL para el registro, almacenamiento de objetos para las salidas, una cola de jobs con workers y un pool aparte para el residuo del LLM.</small></li>
   </ol>
