@@ -53,7 +53,7 @@ uv run --env-file .env python -m anon.cli once --out output/
 
 | Variable | Para qué | Por defecto |
 | --- | --- | --- |
-| `ANON_SECRET` | Secreto de los seudónimos deterministas. Se fija una vez y no se cambia: cambiarlo cambia todos los seudónimos. | uno de desarrollo; en producción, siempre uno propio |
+| `ANON_SECRET` | Secreto de los seudónimos deterministas. Se fija una vez y no se cambia: si cambiara, los seudónimos ya guardados en `state.json` se conservan, pero las personas nuevas (o todas, si se pierde el estado) recibirían valores distintos. | uno de desarrollo; en producción, siempre uno propio |
 | `STATE_DIR` | Estado del servicio y del pipeline. | `./state` (en Docker, `/data/state`) |
 | `PORT` | Puerto HTTP. | `9000` |
 | `FUENTES_URL`, `FUENTES_TOKEN` | API de fuentes para los scripts locales y `anon.cli once`. El servicio los recibe en `POST /v1/run`. | — |

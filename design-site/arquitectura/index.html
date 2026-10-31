@@ -104,7 +104,6 @@
   <path d="M11 152H26" stroke="#12161D" stroke-width="1.6" fill="none" marker-end="url(#ah)"/><text x="34" y="156" class="d">Flujo de datos</text>
   <path d="M11 174H27" stroke="#1F3FBF" stroke-width="2" stroke-dasharray="4 3" fill="none"/><text x="34" y="178" class="d">Ruta en vivo</text>
   <path d="M11 196H27" stroke="#3B5B8C" stroke-width="1.4" stroke-dasharray="3 3" fill="none"/><text x="34" y="200" class="d">Lee / escribe /data</text>
-  <text x="12" y="224" class="s en-curso" fill="#5A6371">en curso: sprint</text>
 </g>
 
 <!-- ===================== SERVICIO (contenedor siempre encendido) ===================== -->
@@ -173,17 +172,17 @@
 <g id="etapa-3-registro" transform="translate(578 310)">
   <rect class="caja-codigo" width="150" height="104" rx="8" fill="#FFFFFF" stroke="#0E7C66" stroke-width="1.5"/>
   <text x="12" y="22" class="t13"><tspan fill="#0E7C66">3</tspan> · Registro</text>
-  <text x="12" y="42" class="d">anclado en llaves</text>
-  <text x="12" y="58" class="d">cl:/kp: de tablas;</text>
-  <text x="12" y="74" class="d">fusiona solo con</text>
-  <text x="12" y="90" class="d">identificador duro</text>
+  <text x="12" y="42" class="d">anclado en cl:/kp:;</text>
+  <text x="12" y="58" class="d">identificador duro;</text>
+  <text x="12" y="74" class="d">nombre exacto solo</text>
+  <text x="12" y="90" class="d">si es único</text>
 </g>
 <g id="etapa-4a-reglas" transform="translate(744 310)">
   <rect class="caja-codigo" width="200" height="104" rx="8" fill="#E8F4F1" stroke="#0E7C66" stroke-width="2"/>
   <text x="12" y="22" class="t13" fill="#0E7C66">4a · Detección por reglas</text>
-  <text x="12" y="42" class="d">cédula, teléfono, cuenta,</text>
-  <text x="12" y="58" class="d">correo «arroba», placa,</text>
-  <text x="12" y="74" class="d">pasaporte, @usuario</text>
+  <text x="12" y="42" class="d">cédula, teléfono, correo,</text>
+  <text x="12" y="58" class="d">placa, pasaporte,</text>
+  <text x="12" y="74" class="d">@usuario</text>
   <text x="12" y="90" class="d">+ nombres del registro</text>
 </g>
 <g id="etapa-4b-ia" transform="translate(960 310)">
@@ -202,8 +201,8 @@
   <text x="12" y="58" class="d">→ evidencia dura (correo,</text>
   <text x="12" y="74" class="d">cédula, teléfono, llaves)</text>
   <text x="12" y="90" class="d">si no: orden fijo + aviso</text>
-  <text x="12" y="110" class="s en-curso" fill="#5A6371">en curso: prior por tipo y</text>
-  <text x="12" y="124" class="s en-curso" fill="#5A6371">reglas de vínculo</text>
+  <text x="12" y="106" class="d">entre tipos: el contexto;</text>
+  <text x="12" y="122" class="d">fecha + monto desempatan</text>
 </g>
 <g id="etapa-6-seudonimos" transform="translate(492 452)">
   <rect class="caja-codigo" width="190" height="132" rx="8" fill="#FFFFFF" stroke="#0E7C66" stroke-width="1.5"/>
@@ -220,8 +219,8 @@
   <text x="12" y="58" class="d">ocupación → sector; barrio →</text>
   <text x="12" y="74" class="d">otro de la ciudad o ciudad;</text>
   <text x="12" y="90" class="d">año → «hace unos años»</text>
-  <text x="12" y="110" class="s en-curso" fill="#5A6371">en curso: contra la fila</text>
-  <text x="12" y="124" class="s en-curso" fill="#5A6371">del maestro</text>
+  <text x="12" y="106" class="d">también contra la fila</text>
+  <text x="12" y="122" class="d">maestra del cliente</text>
 </g>
 <g id="etapa-8-reemplazo" transform="translate(934 452)">
   <rect class="caja-codigo" width="172" height="132" rx="8" fill="#FFFFFF" stroke="#0E7C66" stroke-width="1.5"/>
@@ -243,9 +242,9 @@
   <rect class="caja-salida" width="280" height="100" rx="8" fill="#FFFFFF" stroke="#12161D" stroke-width="2"/>
   <text x="12" y="22" class="t13">Publicación atómica</text>
   <text x="12" y="42" class="d">escribe en output/&lt;job&gt;.&lt;n&gt;.tmp,</text>
-  <text x="12" y="58" class="d">renombra a output/&lt;job&gt;/ y</text>
-  <text x="12" y="74" class="d">después mueve CURRENT</text>
-  <text x="12" y="90" class="d" fill="#5A6371">siempre publica; no hay compuerta</text>
+  <text x="12" y="58" class="d">renombra y mueve CURRENT;</text>
+  <text x="12" y="74" class="d" fill="#5A6371">la autoverificación no bloquea:</text>
+  <text x="12" y="90" class="d" fill="#5A6371">publica y deja las fugas en report.json</text>
 </g>
 
 <!-- ===================== VOLUMEN /data ===================== -->
@@ -333,13 +332,13 @@
     <li><span class="n">3</span><span><b>Registro de personas.</b> Las tablas primero: clientes, empleados y perfiles de chat con sus identificadores duros. Un cliente migrado con id nuevo se une a uno existente solo si su cédula coincide con exactamente uno.</span></li>
     <li><span class="n">4a</span><span><b>Rama de código.</b> Reglas para nombres conocidos y desconocidos, correos (también deletreados), celulares, cédulas, direcciones, fechas de nacimiento, placas, pasaportes, menciones, handles y slugs; una lista de términos conservados. Hoy procesa todo el volumen.</span></li>
     <li class="is-ia"><span class="n">4b</span><span><b>Rama de IA (siguiente paso, no construida).</b> Un modelo pequeño clasificaría solo el residuo ambiguo (persona, organización, lugar o figura pública, y el género), con caché y fail-closed; sus decisiones se guardarían como reglas.</span></li>
-    <li><span class="n">5</span><span><b>Vinculación.</b> Cada mención → persona: autor, dueño del registro, participantes del hilo y evidencia dura (correo, cédula, celular, llave); si nada decide, regla determinista con advertencia. Prioridad y filtro por tipo de persona, pase de eliminación, evidencia ampliada y por línea, y desempates de homónimos <span class="tag en-curso">en curso</span>.</span></li>
+    <li><span class="n">5</span><span><b>Vinculación.</b> Cada mención → persona: autor, dueño del registro, participantes del hilo, evidencia dura (correo, cédula, celular, llave, o la fecha y el monto de una transacción) y el handle de la persona en el texto. Entre un cliente y un empleado con el mismo nombre corto decide el contexto de la línea y del registro; sin señales, el cliente. Si nada decide, regla determinista con advertencia.</span></li>
     <li><span class="n">6</span><span><b>Seudónimos deterministas.</b> Cada valor sale de HMAC-SHA256(secreto, persona), con la categoría, el género y el formato del original; los valores reales de todos se reservan. El mapa vive en <code>state.json</code>, así quien ya estaba conserva su seudónimo cuando las fuentes crecen.</span></li>
-    <li><span class="n">7</span><span><b>Cuasi-identificadores.</b> En la tabla de clientes, ocupación → sector y barrio → otro de la misma ciudad; en autodescripciones, ocupación, barrio y año se generalizan. En cualquier redacción y contra la fila maestra <span class="tag en-curso">en curso</span>.</span></li>
+    <li><span class="n">7</span><span><b>Cuasi-identificadores.</b> En la tabla de clientes, ocupación → sector y barrio → otro de la misma ciudad. En texto libre, en cualquier redacción y también contra la fila maestra del cliente: ocupación → sector, barrio → ciudad, año → "hace unos años".</span></li>
     <li><span class="n">8</span><span><b>Reemplazo por fragmentos.</b> Se reemplaza, nunca se reescribe: el texto no personal queda idéntico y la salida es 1:1 con la entrada.</span></li>
     <li class="is-gate"><span class="n">9</span><span><b>Autoverificación.</b> Busca cada forma real en toda la salida con la normalización del jurado. Un valor que sigue presente no se declara en <code>entities.json</code> y queda en <code>report.json</code>, porque el validador rechazaría la salida completa. Medido hoy: 0 valores en ambos corpus. Paso de reparación (reemplazar y volver a verificar) <span class="tag en-curso">en curso</span>.</span></li>
     <li><span class="n">10</span><span><b>Publicación atómica.</b> Los 4 archivos van a una carpeta temporal que se renombra a <code>output/&lt;job&gt;/</code>; luego cambia el puntero <code>CURRENT</code>. <code>state.json</code> se escribe atómico y deja una instantánea por corrida.</span></li>
-    <li class="is-live"><span class="n">vivo</span><span><b>POST /anonymize.</b> Hasta 50 registros, 55 s máx. por lote (504). Usa el mismo <code>state.json</code> y el contexto de hilo de la corrida, así una persona ya vista recibe su seudónimo de <code>output/</code>; una persona nueva recibe uno nuevo, que vive en memoria hasta la próxima corrida.</span></li>
+    <li class="is-live"><span class="n">vivo</span><span><b>POST /anonymize.</b> Hasta 50 registros, 55 s máx. por lote (504). Usa el mismo <code>state.json</code> y el contexto de hilo de la corrida, así una persona ya vista recibe su seudónimo de <code>output/</code>; una persona nueva recibe uno nuevo, que no se guarda en <code>state.json</code>: vive solo en la memoria del servidor hasta la próxima corrida o un reinicio.</span></li>
   </ol>
 </section>
 
@@ -349,10 +348,10 @@
   <table class="dec w-lg">
     <thead><tr><th>Decisión</th><th>Elegimos</th><th>Descartamos</th><th>Por qué</th></tr></thead>
     <tbody>
-      <tr><td><span class="dn">D1</span> Infraestructura</td><td data-label="Elegimos">Contenedor siempre encendido (Railway) + disco persistente (volumen <code>/data</code>)</td><td data-label="Descartamos">Laptop con túnel; funciones serverless</td><td data-label="Por qué">Si el servicio deja de responder durante una corrida, la corrida termina sin puntaje y cuenta como usada. Las funciones serverless no tienen disco ni trabajo en segundo plano y tienen límite de duración; la regeneración completa debe terminar en menos de 2 h y sobrevivir a un reinicio.</td></tr>
+      <tr><td><span class="dn">D1</span> Infraestructura</td><td data-label="Elegimos">Contenedor siempre encendido (Railway) + disco persistente (volumen <code>/data</code>)</td><td data-label="Descartamos">Laptop con túnel; funciones serverless</td><td data-label="Por qué">Si el servicio deja de responder durante una corrida, la corrida termina sin puntaje y cuenta como usada. Las funciones serverless no tienen disco persistente, no permiten trabajo en segundo plano tras responder y tienen límite de duración; la regeneración completa debe terminar en menos de 2 h y sobrevivir a un reinicio.</td></tr>
       <tr><td><span class="dn">D2</span> Uso del LLM</td><td data-label="Elegimos">Reglas primero; la Rama de IA queda para el residuo ambiguo</td><td data-label="Descartamos">Todo-LLM · reescribir el texto con un modelo</td><td data-label="Por qué">Según el enunciado, una solución sólida por reglas ronda 88 de 100. Las nuestras pasan el validador y los tests públicos con 0 tokens. Un LLM no es determinista y reescribir pierde parecido con la salida ideal.</td></tr>
       <tr><td><span class="dn">D3</span> Seudónimos</td><td data-label="Elegimos">Deterministas por HMAC + mapa persistido en <code>state.json</code></td><td data-label="Descartamos">Aleatorios o marcadores <code>[NOMBRE]</code></td><td data-label="Por qué">La misma persona debe recibir el mismo seudónimo en todas las fuentes y entre corridas, y el texto debe seguir sirviendo para entrenar.</td></tr>
-      <tr><td><span class="dn">D4</span> Identidad</td><td data-label="Elegimos">Tablas como ancla; fusión solo con coincidencia exacta de un identificador duro</td><td data-label="Descartamos">Agrupar por nombre, ciudad o cargo</td><td data-label="Por qué">Hay clientes con el mismo nombre completo; el nombre solo no distingue personas. Ante cualquier ambigüedad, no se fusiona.</td></tr>
+      <tr><td><span class="dn">D4</span> Identidad</td><td data-label="Elegimos">Tablas como ancla; fusión por identificador duro (cédula, correo). Un perfil de chat sin correo que coincida se une solo si su nombre completo coincide exacto con una única persona; ante homónimos decide la evidencia del hilo y, si no hay, no se fusiona.</td><td data-label="Descartamos">Agrupar por nombre parcial, ciudad o cargo</td><td data-label="Por qué">Hay clientes con el mismo nombre completo; el nombre solo no distingue personas y se usa únicamente cuando es exacto y no hay otra persona con él.</td></tr>
       <tr><td><span class="dn">D5</span> Lo desconocido</td><td data-label="Elegimos">Fail-closed: lo que parece personal y no se puede clasificar se reemplaza</td><td data-label="Descartamos">Dejar pasar lo desconocido</td><td data-label="Por qué">La fuga pesa 45 de 100 en la evaluación y la utilidad 35: ante la duda, se protege a la persona.</td></tr>
     </tbody>
   </table>

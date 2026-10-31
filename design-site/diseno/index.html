@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Doc de diseño · Kipu Pay · Corpus anonimizado</title>
-<meta name="description" content="Doc de diseño del servicio que entrega el corpus de soporte de Kipu Pay listo para entrenar modelos, sin nadie identificable.">
+<meta name="description" content="Doc de diseño del servicio que entrega el corpus de soporte de Kipu Pay listo para entrenar modelos, con cada persona reemplazada por un seudónimo consistente.">
 <meta name="theme-color" content="#0C1B25">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -86,13 +86,13 @@
     <tr><th>Placas y pasaportes</th><td data-label="Cómo">Patrones propios (el pasaporte exige la palabra clave cercana); el reemplazo conserva el formato.</td></tr>
     <tr><th>Nombres fuera del texto visible</th><td data-label="Cómo">Se procesan también metadatos de PDF y HTML, front matter, comentarios HTML, texto oculto, nombres de archivo y adjuntos; se reemplaza el valor y la clave se conserva.</td></tr>
     <tr><th>Menciones de Slack</th><td data-label="Cómo">Cada mención se resuelve con el perfil del usuario y recibe el seudónimo de esa persona.</td></tr>
-    <tr><th>Dos clientas con el mismo nombre completo</th><td data-label="Cómo">Cada una es una persona por su llave. Cada mención se asigna por evidencia dura: correo, cédula, celular o llave cercanos. Desempates por id de PQR, fecha + monto cruzados con transacciones y slug del adjunto <span class="tag en-curso">en curso</span>; evidencia por línea en documentos que nombran a varias clientas <span class="tag en-curso">en curso</span>.</td></tr>
-    <tr><th>Una agente que se llama igual que una clienta</th><td data-label="Cómo">Son dos personas con llaves distintas. En nombres cortos compartidos, la empleada tiene prioridad sobre la clienta, y al vincular usuarios de chat se filtra por tipo de persona <span class="tag en-curso">en curso</span>.</td></tr>
-    <tr><th>El bot nombra al agente; los agentes repiten correos y celulares de clientes</th><td data-label="Cómo">No se resuelve solo por autor: cada correo o celular del texto se asigna a su dueño en el registro. Evidencia ampliada: dirección, fechas largas en español y últimos 4 dígitos <span class="tag en-curso">en curso</span>.</td></tr>
-    <tr><th>Barrio + ocupación + año</th><td data-label="Cómo">En la tabla de clientes, la ocupación pasa a su sector y el barrio a otro de la misma ciudad. En autodescripciones, ocupación → sector, barrio → ciudad, año → "hace unos años". En cualquier redacción y también contra la fila maestra <span class="tag en-curso">en curso</span>.</td></tr>
-    <tr><th>Relación "reporta a" entre empleados</th><td data-label="Cómo">La columna se resuelve de forma explícita, solo entre empleados, para que el jefe lleve su mismo seudónimo <span class="tag en-curso">en curso</span>.</td></tr>
-    <tr><th>Apellido que también es lugar o marca</th><td data-label="Cómo">Una lista de organizaciones, marcas, lugares y figuras públicas se conserva y el contexto decide; corrección para que una marca no se trate como persona <span class="tag en-curso">en curso</span>.</td></tr>
-    <tr><th>Mención ambigua</th><td data-label="Cómo">Desempate fijo: autor, dueño del registro, participantes del hilo y evidencia dura; si nada decide, una regla determinista y una advertencia. Pase de eliminación entre candidatos <span class="tag en-curso">en curso</span>.</td></tr>
+    <tr><th>Dos clientas con el mismo nombre completo</th><td data-label="Cómo">Cada una es una persona por su llave. Cada mención se asigna por evidencia dura: correo, cédula, celular o llave cercanos (también la de un PQR). Si el texto cita un pago, su fecha y su monto cruzados con transacciones también desempatan.</td></tr>
+    <tr><th>Una agente que se llama igual que una clienta</th><td data-label="Cómo">Son dos personas con llaves distintas. Si un nombre corto coincide con las dos y nada más decide, decide el contexto: una fila de empleados o un registro de una empleada indica colega; en la línea de la mención, un cargo o el buzón corporativo indican colega, y una llave o un identificador de cliente indican clienta. Sin señales, se elige a la clienta.</td></tr>
+    <tr><th>El bot nombra al agente; los agentes repiten correos y celulares de clientes</th><td data-label="Cómo">No se resuelve solo por autor: cada correo o celular del texto se asigna a su dueño en el registro, no a quien lo escribe.</td></tr>
+    <tr><th>Barrio + ocupación + año</th><td data-label="Cómo">En la tabla de clientes, la ocupación pasa a su sector y el barrio a otro de la misma ciudad. En texto libre, en cualquier redacción, se generalizan cuando la ocupación sigue a una pista, cuando alguno coincide con la fila maestra del cliente vinculado o, sin cliente vinculado, cuando ocupación y barrio aparecen juntos: ocupación → sector, barrio → ciudad, año → "hace unos años". Un lugar mencionado solo se conserva.</td></tr>
+    <tr><th>Relación "reporta a" entre empleados</th><td data-label="Cómo">La columna se resuelve solo entre empleados, así el jefe lleva su mismo seudónimo aunque una clienta comparta su nombre corto.</td></tr>
+    <tr><th>Apellido que también es lugar o marca</th><td data-label="Cómo">Una lista de organizaciones, marcas, lugares y figuras públicas se conserva, también cuando la marca abre un tramo más largo con mayúscula; al cargar el estado se descarta una «persona» de marca que guardó una versión anterior. Donde ese nombre nombra a la persona anclada en el registro (autor, dueño, participante o dueño de un identificador), se reemplaza <span class="tag en-curso">en curso</span>.</td></tr>
+    <tr><th>Mención ambigua</th><td data-label="Cómo">Desempate fijo: autor, dueño del registro, participantes del hilo, evidencia dura y el handle de la persona en el texto; entre una clienta y una empleada decide el contexto. Si nada decide, una regla determinista dentro del mismo tipo y una advertencia.</td></tr>
     <tr><th>Documentos en inglés</th><td data-label="Cómo">Las fechas de nacimiento conservan su formato (mes/día/año).</td></tr>
   </tbody>
 </table></div>
@@ -121,13 +121,13 @@
       <li><span class="lk">(a)</span> Reglas: nombres conocidos y desconocidos, correos (también deletreados), celulares, cédulas, direcciones, fechas de nacimiento, placas, pasaportes, menciones, handles y slugs; lista de términos conservados <span class="tag code">código</span></li>
       <li><span class="lk">(b)</span> Siguiente paso, Rama de IA: solo el residuo ambiguo, con caché y fail-closed <span class="tag ai">IA</span></li>
     </ul></li>
-  <li><b>Vinculación.</b> Cada mención → persona: autor, dueño del registro, participantes del hilo y evidencia dura; si nada decide, regla determinista con advertencia. Prioridad por tipo, filtro por tipo, pase de eliminación, evidencia ampliada y por línea, y desempates de homónimos <span class="tag en-curso">en curso</span>.</li>
-  <li><b>Seudónimos deterministas.</b> Cada valor sale de HMAC-SHA256(secreto, persona), con la categoría, el género y el formato del original. Los valores reales de todos se reservan para que ningún seudónimo coincida con uno; un valor ya publicado gana sobre uno nuevo.</li>
-  <li><b>Cuasi-identificadores.</b> Ocupación y barrio generalizados en la tabla de clientes; ocupación, barrio y año en autodescripciones.</li>
+  <li><b>Vinculación.</b> Cada mención → persona: autor, dueño del registro, participantes del hilo, evidencia dura (correo, cédula, celular, llave, o la fecha y el monto de una transacción) y el handle de la persona en el texto. Entre un cliente y un empleado con el mismo nombre corto decide el contexto de la línea y del registro; sin señales, el cliente. Si nada decide, regla determinista con advertencia.</li>
+  <li><b>Seudónimos deterministas.</b> Cada valor sale de HMAC-SHA256(secreto, persona), con la categoría, el género y el formato del original. Los valores reales de todos se reservan para que ningún seudónimo coincida con uno; un valor ya publicado gana sobre uno nuevo, y dos personas nunca comparten una fecha de nacimiento seudónima.</li>
+  <li><b>Cuasi-identificadores.</b> Ocupación y barrio generalizados en la tabla de clientes; en texto libre, ocupación, barrio y año, en cualquier redacción y también contra la fila maestra del cliente.</li>
   <li><b>Reemplazo por fragmentos.</b> Se reemplaza, nunca se reescribe: el texto no personal queda idéntico; ids 1:1.</li>
   <li class="is-gate"><b>Autoverificación.</b> Busca cada forma real en toda la salida con la normalización del jurado (NFKC, tildes, confusables, separadores de dígitos). El validador oficial rechaza la salida completa si una forma declarada sigue en ella; por eso, un valor que sigue presente no se declara en <code>entities.json</code> y queda en <code>report.json</code>: cuesta como máximo ese test y algo de honestidad, nunca la corrida. Medido hoy: 0 valores retirados en ambos corpus. Paso de reparación: reemplazar lo encontrado y volver a verificar <span class="tag en-curso">en curso</span>. <span class="tag danger">compuerta</span></li>
   <li><b>Publicación atómica.</b> Los 4 archivos se escriben en una carpeta temporal, se renombran y el puntero <code>CURRENT</code> cambia al final. <code>state.json</code> se escribe atómico y deja una instantánea por corrida.</li>
-  <li><b>/anonymize en vivo.</b> Usa el mismo <code>state.json</code> y repite el contexto de hilo de la corrida, así una persona ya vista recibe su seudónimo de <code>output/</code>. Una persona nueva recibe uno nuevo y único, que vive en memoria hasta la próxima corrida.</li>
+  <li><b>/anonymize en vivo.</b> Usa el mismo <code>state.json</code> y repite el contexto de hilo de la corrida, así una persona ya vista recibe su seudónimo de <code>output/</code>. Una persona nueva recibe uno nuevo y único, que no se guarda en <code>state.json</code>: vive solo en la memoria del servidor hasta la próxima corrida o un reinicio.</li>
 </ol>
 
 <h3>Endpoints</h3>
@@ -174,10 +174,10 @@
 <div class="tbl stack-sm"><table class="w-lg dec">
   <thead><tr><th>Decisión</th><th>Elegimos</th><th>Descartamos</th><th>Por qué</th></tr></thead>
   <tbody>
-    <tr><th><span class="dn">D1</span> Infraestructura</th><td data-label="Elegimos">Contenedor siempre encendido (Railway) + volumen persistente</td><td data-label="Descartamos">Laptop con túnel · funciones serverless</td><td data-label="Por qué">Si el servicio deja de responder durante una corrida, la corrida termina sin puntaje y cuenta como usada. Serverless no permite trabajo en segundo plano tras responder y limita la duración.</td></tr>
+    <tr><th><span class="dn">D1</span> Infraestructura</th><td data-label="Elegimos">Contenedor siempre encendido (Railway) + volumen persistente</td><td data-label="Descartamos">Laptop con túnel · funciones serverless</td><td data-label="Por qué">Si el servicio deja de responder durante una corrida, la corrida termina sin puntaje y cuenta como usada. Las funciones serverless no tienen disco persistente, no permiten trabajo en segundo plano tras responder y tienen límite de duración.</td></tr>
     <tr><th><span class="dn">D2</span> Uso del LLM</th><td data-label="Elegimos">Reglas primero; la Rama de IA queda para el residuo ambiguo <span class="tag code">código</span></td><td data-label="Descartamos">Todo-LLM · reescribir el texto con un modelo</td><td data-label="Por qué">Las reglas pasan el validador y los tests públicos con 0 tokens. Reescribir pierde parecido con la salida ideal y puede inventar o borrar datos.</td></tr>
     <tr><th><span class="dn">D3</span> Seudónimos</th><td data-label="Elegimos">Deterministas (HMAC) + mapa persistido</td><td data-label="Descartamos">Aleatorios · <code>[NOMBRE]</code> · hash</td><td data-label="Por qué">Los aleatorios rompen la consistencia al crecer las fuentes; los marcadores y el hash pierden categoría, homónimos y estructura.</td></tr>
-    <tr><th><span class="dn">D4</span> Identidad</th><td data-label="Elegimos">Tablas como ancla; fusión solo con coincidencia exacta de un identificador duro</td><td data-label="Descartamos">Agrupar por nombre, ciudad o cargo</td><td data-label="Por qué">El nombre no es único; ante cualquier ambigüedad no se fusiona.</td></tr>
+    <tr><th><span class="dn">D4</span> Identidad</th><td data-label="Elegimos">Tablas como ancla; fusión por identificador duro (cédula, correo). Un perfil de chat sin correo que coincida se une solo si su nombre completo coincide exacto con una única persona; ante homónimos decide la evidencia del hilo y, si no hay, no se fusiona.</td><td data-label="Descartamos">Agrupar por nombre parcial, ciudad o cargo</td><td data-label="Por qué">El nombre solo no distingue personas: se usa únicamente cuando es exacto y no hay otra persona con él.</td></tr>
     <tr><th><span class="dn">D5</span> Lo desconocido</th><td data-label="Elegimos">Fail-closed: lo que parece personal y no se puede clasificar se reemplaza</td><td data-label="Descartamos">Dejar pasar</td><td data-label="Por qué">La fuga pesa 45 de 100.</td></tr>
     <tr><th>Estado</th><td data-label="Elegimos"><code>state.json</code> atómico en el volumen</td><td data-label="Descartamos">PostgreSQL gestionado</td><td data-label="Por qué">Un solo escritor por corrida y ~0,6 MB: un archivo es atómico, fácil de comparar y no agrega otro servicio que pueda caerse.</td></tr>
     <tr><th>Autoverificación</th><td data-label="Elegimos">No declarar lo que se escapa y registrarlo</td><td data-label="Descartamos">Declararlo igual</td><td data-label="Por qué">El validador rechazaría la salida completa y la corrida se perdería.</td></tr>
@@ -205,16 +205,16 @@
 <div class="tbl stack-sm"><table class="w-md">
   <thead><tr><th>Falla</th><th>Qué pasa</th></tr></thead>
   <tbody>
-    <tr><th>Se cae el servidor HTTP</th><td data-label="Qué pasa"><code>run.sh</code> lo reinicia en 1 s; la corrida sigue en su propio proceso.</td></tr>
-    <tr><th>Se reinicia el contenedor</th><td data-label="Qué pasa">Railway lo reinicia si termina con error (hasta 5 veces); al arrancar, el servicio adopta la corrida viva o la relanza.</td></tr>
+    <tr><th>Se cae el servidor HTTP</th><td data-label="Qué pasa"><code>run.sh</code> lo reinicia en 1 s; la corrida sigue en su propio proceso y el servidor nuevo la adopta.</td></tr>
+    <tr><th>Se reinicia el contenedor</th><td data-label="Qué pasa">Railway lo reinicia si termina con error (hasta 5 veces). La corrida muere con el contenedor y, al arrancar, el servicio la relanza con el mismo <code>job_id</code> (o la marca <code>failed</code> si pasaron 115 min o se agotaron los relanzamientos).</td></tr>
     <tr><th>Muere el proceso de la corrida</th><td data-label="Qué pasa">Se relanza hasta 2 veces, desde cero y con el mismo <code>job_id</code>.</td></tr>
     <tr><th>La corrida se alarga</th><td data-label="Qué pasa">A los 115 min se corta y queda <code>failed</code> con su error, antes del límite de 2 h.</td></tr>
-    <tr><th>El API de fuentes responde 429 o 5xx</th><td data-label="Qué pasa">Reintentos que respetan <code>Retry-After</code>; ante 429 se pausan todas las descargas.</td></tr>
+    <tr><th>El API de fuentes responde 429 o 5xx</th><td data-label="Qué pasa">Hasta 6 reintentos con espera exponencial que respetan <code>Retry-After</code> (máximo 90 s); ante 429 se pausan todas las descargas.</td></tr>
     <tr><th>Las fuentes crecen durante la descarga</th><td data-label="Qué pasa">El re-chequeo de <code>record_index</code> lo detecta y se descarga de nuevo.</td></tr>
-    <tr><th>Corrida a medias</th><td data-label="Qué pasa">Nunca se publica: <code>CURRENT</code> solo cambia con los 4 archivos completos.</td></tr>
+    <tr><th>Corrida a medias</th><td data-label="Qué pasa">Nunca se publica: <code>CURRENT</code> solo cambia con los 4 archivos completos; si falta uno o <code>entities.json</code> está mal formado, la corrida queda <code>failed</code>.</td></tr>
     <tr><th>/anonymize lento o fuera de esquema</th><td data-label="Qué pasa">504 a los 55 s; 422 si un registro no cumple el esquema.</td></tr>
     <tr><th>Se pierde el volumen</th><td data-label="Qué pasa">Riesgo abierto: el mapa de seudónimos y sus instantáneas viven en el mismo volumen.</td></tr>
-    <tr><th>Redespliegue durante una corrida</th><td data-label="Qué pasa">Regla operativa: nunca redesplegar mientras corre una evaluación; la corrida volvería a empezar.</td></tr>
+    <tr><th>Redespliegue durante una corrida</th><td data-label="Qué pasa">Regla operativa: nunca redesplegar mientras corre una evaluación. El servicio deja de responder unos segundos (según el enunciado, eso puede anular la corrida) y la corrida vuelve a empezar, gastando un relanzamiento y parte de las 2 h.</td></tr>
   </tbody>
 </table></div>
 </section>
@@ -237,7 +237,7 @@
   <tbody>
     <tr><th rowspan="4" class="grp-h">Costo y tiempo</th><td>Tokens de LLM por corrida</td><td class="num" data-label="Meta">0</td><td data-label="Medido">0</td></tr>
     <tr><td>Corrida completa</td><td class="num" data-label="Meta">&lt; 2 h</td><td data-label="Medido">~36 s en local antes del crecimiento y ~60 s después; ~8 min en Railway en la corrida 1, con una versión anterior y más lenta</td></tr>
-    <tr><td>/anonymize por lote</td><td class="num" data-label="Meta">&lt; 60 s</td><td data-label="Medido">55 s máx. por lote (504)</td></tr>
+    <tr><td>/anonymize por lote</td><td class="num" data-label="Meta">&lt; 60 s</td><td data-label="Medido">Tope de 55 s por lote (si no termina, 504); latencia sin medir</td></tr>
     <tr><td>Tamaño de <code>state.json</code></td><td class="num" data-label="Meta">&lt; 2 MB</td><td data-label="Medido">276 KB tras la corrida 1; ~0,6 MB tras el crecimiento</td></tr>
   </tbody>
   <tbody>
@@ -253,8 +253,8 @@
 <div class="tbl stack-sm"><table class="kv">
   <tbody>
     <tr><th>Autenticación</th><td>Ninguna, porque el contrato del reto pide un servicio sin autenticación; un header <code>Authorization</code> se acepta y se ignora.</td></tr>
-    <tr><th>entities.json</th><td>Contiene las formas reales y es solo para el jurado: se sirve sin autenticación porque el contrato lo exige y nunca viaja con el dataset. En un despliegue real iría detrás de autenticación o no se expondría.</td></tr>
-    <tr><th>Secreto</th><td><code>ANON_SECRET</code>: en producción viene del entorno; el valor por defecto del código es solo para desarrollo. Se fija una vez y no se cambia: cambiarlo cambia todos los seudónimos.</td></tr>
+    <tr><th>entities.json</th><td>Contiene las formas reales y es solo para el jurado: se sirve sin autenticación (en <code>/v1/entities</code> y <code>/v1/output/entities.json</code>) porque el contrato lo exige, y no forma parte del dataset para el comprador. En un despliegue real iría detrás de autenticación o no se expondría.</td></tr>
+    <tr><th>Secreto</th><td><code>ANON_SECRET</code>: en producción viene del entorno; el valor por defecto del código es solo para desarrollo. Se fija una vez y no se cambia: si cambiara, los seudónimos ya guardados en <code>state.json</code> se conservan, pero las personas nuevas (o todas, si se pierde el estado) recibirían valores distintos.</td></tr>
     <tr><th>Token de fuentes</th><td>Llega en <code>POST /run</code>, se guarda con permiso 600 solo para poder relanzar y se borra al terminar la corrida.</td></tr>
     <tr><th>Datos reales en el volumen</th><td><code>state.json</code> es la llave de re-identificación: relaciona los valores reales con sus seudónimos. Él, sus instantáneas en <code>history/</code> y las copias crudas de las fuentes en <code>raw/</code> viven solo en el volumen privado de Railway; la API nunca los sirve.</td></tr>
     <tr><th>Repositorio</th><td><code>.env</code> y los datos del reto están en <code>.gitignore</code>: nunca se versionan.</td></tr>
@@ -266,7 +266,7 @@
 <div class="sec-head"><h2><span class="n">8</span> Riesgos y siguiente paso</h2><a class="path" href="#siguiente">/diseno/#siguiente</a></div>
 <ul class="dash">
   <li><b>Menciones ambiguas.</b> El desempate es reproducible, aunque puede no ser el que elegiría una persona.</li>
-  <li><b>Tests ocultos con mecanismos nuevos.</b> Las reglas cubren lo que conocemos; lo nuevo depende de la autoverificación y del fail-closed.</li>
+  <li><b>Tests ocultos con mecanismos nuevos.</b> Las reglas cubren lo que conocemos; lo nuevo depende del fail-closed; la autoverificación solo detecta lo que se escapa y lo registra en <code>report.json</code>.</li>
   <li><b>Un solo volumen y una sola réplica.</b> Perder el volumen sin respaldo rompería la continuidad de los seudónimos.</li>
 </ul>
 <h3>Siguiente paso (no construido)</h3>
