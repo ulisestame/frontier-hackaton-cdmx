@@ -726,7 +726,7 @@ class Engine:
                     pid = self._weak_pick(pids, ctx, text, start, surf)
                 else:
                     pid = self.pick(pids, ctx, text)
-                if pid and not self._is_kept_at(text, start, end):
+                if pid and not self._is_kept_at(text, start, end, self._anchored(pid, ctx)):
                     p = self.persons[pid]
                     repl = self.render_name(p, ng, ns, surf, text, start, end)
                     spans.append((start, end, repl, "name", p.pid, surf))
@@ -802,11 +802,20 @@ class Engine:
             return next(iter(pids))
         return None
 
-    def _is_kept_at(self, text, start, end) -> bool:
+    def _is_kept_at(self, text, start, end, anchored: bool = False) -> bool:
         window = norm(text[max(0, start - 25):min(len(text), end + 25)])
         surf = norm(text[start:end])
-        # >= : a mention that IS a kept term ("Juan Valdez") is kept too, not only a part of one
-        return any(k in window and surf in k for k in _KEPT_NORM if len(k) >= len(surf))
+        # A part of a kept term is kept. A mention that IS a kept term is kept too, unless it
+        # names a person anchored in this record (the role decides, not the name).
+        return any(k in window and surf in k for k in _KEPT_NORM
+                   if len(k) > len(surf) or (len(k) == len(surf) and not anchored))
+
+    def _anchored(self, pid: str, ctx: Ctx) -> bool:
+        """The person is this record's author, owner or a participant, or a hard identifier in
+        the record points to them."""
+        pid = self.resolve_pid(pid)
+        around = {self.resolve_pid(x) for x in [ctx.author, ctx.owner, *ctx.near] if x}
+        return pid in around or pid in self.evidence(ctx.record_text or "")
 
     def _unknown_name(self, text, toks, i, ctx):
         s0, e0, raw0, n0 = toks[i]
