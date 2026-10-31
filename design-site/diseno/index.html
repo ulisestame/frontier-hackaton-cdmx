@@ -254,9 +254,9 @@
   <tbody>
     <tr><th>Autenticación</th><td>Ninguna, porque el contrato del reto pide un servicio sin autenticación; un header <code>Authorization</code> se acepta y se ignora.</td></tr>
     <tr><th>entities.json</th><td>Contiene las formas reales y es solo para el jurado: se sirve sin autenticación porque el contrato lo exige y nunca viaja con el dataset. En un despliegue real iría detrás de autenticación o no se expondría.</td></tr>
-    <tr><th>Secreto</th><td><code>ANON_SECRET</code> llega por variable de entorno, se fija una vez y no se cambia: cambiarlo cambia todos los seudónimos.</td></tr>
+    <tr><th>Secreto</th><td><code>ANON_SECRET</code>: en producción viene del entorno; el valor por defecto del código es solo para desarrollo. Se fija una vez y no se cambia: cambiarlo cambia todos los seudónimos.</td></tr>
     <tr><th>Token de fuentes</th><td>Llega en <code>POST /run</code>, se guarda con permiso 600 solo para poder relanzar y se borra al terminar la corrida.</td></tr>
-    <tr><th>Datos reales en el volumen</th><td>La copia cruda de las fuentes, <code>state.json</code> y sus instantáneas guardan nombres e identificadores reales en claro. La API nunca los sirve y hoy no se podan.</td></tr>
+    <tr><th>Datos reales en el volumen</th><td><code>state.json</code> es la llave de re-identificación: relaciona los valores reales con sus seudónimos. Él, sus instantáneas en <code>history/</code> y las copias crudas de las fuentes en <code>raw/</code> viven solo en el volumen privado de Railway; la API nunca los sirve.</td></tr>
     <tr><th>Repositorio</th><td><code>.env</code> y los datos del reto están en <code>.gitignore</code>: nunca se versionan.</td></tr>
   </tbody>
 </table></div>
@@ -273,6 +273,7 @@
 <ul class="dash">
   <li><b>Rama de IA</b> solo para el residuo ambiguo: modelo pequeño con salida JSON, caché y fail-closed; lo que decida se promueve a reglas (datos).</li>
   <li><b>Conteo de k-anonimato</b> sobre combinaciones de cuasi-identificadores, en lugar de generalizar siempre.</li>
+  <li><b>Cifrado en reposo del estado (KMS) y retención:</b> borrar crudos y snapshots viejos tras cada corrida exitosa.</li>
   <li><b>Formatos para el comprador</b>, generados solo desde la salida anonimizada y nunca con <code>entities.json</code>:</li>
 </ul>
 <div class="tbl stack-sm"><table class="w-md">
