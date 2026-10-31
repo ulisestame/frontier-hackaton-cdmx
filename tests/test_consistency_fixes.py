@@ -144,3 +144,18 @@ def test_two_people_with_one_name_in_one_table_follow_their_column():
     out = eng.anonymize_text(text, Ctx(record_id="doc_t", record_text=text)).split("\n")
     assert _rendered(eng, "kp:KP-901") in out[2] and _rendered(eng, "cl:CL-90901") not in out[2]
     assert _rendered(eng, "cl:CL-90901") in out[3] and _rendered(eng, "kp:KP-901") not in out[3]
+
+
+def test_a_brand_person_saved_by_an_earlier_version_is_dropped_on_load(tmp_path):
+    from anon.core.pipeline import engine_from_state, load_state, save_state
+    eng, _ = _company()
+    brand = eng.add_person("x:name:juan valdez quintero", "external", "Juan Valdez Quintero")
+    eng.note(brand, "tx:1", "Juan Valdez Quintero", "name", "Iván Herrera Pinto")
+    eng.note(eng.persons["cl:CL-90901"], "clientes:CL-90901", "Ramiro Quintana Pardo", "name", "x")
+    save_state(tmp_path, eng, {"x:name:juan valdez quintero": "p_001", "cl:CL-90901": "p_002"})
+    again = engine_from_state(load_state(tmp_path))
+    assert "x:name:juan valdez quintero" not in again.persons
+    assert "cl:CL-90901" in again.persons and "kp:KP-901" in again.persons
+    again.f = fakes.PseudonymFactory(SECRET, _blocked(again))
+    for text in ("Compra Juan Valdez Quintero", "Compra Juan Valdez"):
+        assert again.anonymize_text(text, Ctx(record_id="tx:2")) == text

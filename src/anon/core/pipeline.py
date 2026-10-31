@@ -20,7 +20,7 @@ from pathlib import Path
 from typing import Callable
 
 from .. import fakes
-from .engine import TABLE_KEY_RX, Ctx, Engine, Person, canon, norm
+from .engine import TABLE_KEY_RX, Ctx, Engine, Person, canon, kept_lead, norm
 from .textnorm import Prepared, contains, is_bare_name, record_text
 
 SECRET = os.environ.get("ANON_SECRET", "kipu-frontier-2026-secret").encode()
@@ -92,6 +92,10 @@ def engine_from_state(state: dict) -> Engine:
     eng = Engine(factory)
     eng.memo = dict(state.get("memo", {}))
     for pid, d in state.get("persons", {}).items():
+        if d["kind"] == "external" and kept_lead(d["given"] + d["surnames"]):
+            # a kept term an earlier version read as a name ("<brand> <barrio>"): not a person,
+            # and loading it would make every later mention of the brand match its short form
+            continue
         p = Person(pid=pid, kind=d["kind"], given=d["given"], surnames=d["surnames"],
                    gender=d.get("gender"), city=d.get("city", ""),
                    occupation=d.get("occupation", ""), barrio=d.get("barrio", ""))

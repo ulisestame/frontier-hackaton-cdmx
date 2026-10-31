@@ -99,6 +99,17 @@ def ntoks(text: str) -> tuple[str, ...]:
     return tuple(norm(m.group()) for m in TOKEN_RX.finditer(text))
 
 
+def kept_lead(name) -> int:
+    """How many leading words of a name (a string or a list of name parts) form a kept term,
+    0 when none: "<brand> <barrio>" -> 2. At least two words, so a given name that happens to
+    be a one-word brand is not caught."""
+    words = " ".join(name if isinstance(name, (list, tuple)) else [name]).split()
+    for n in range(len(words), 1, -1):
+        if " ".join(norm(w) for w in words[:n]) in _KEPT_NORM:
+            return n
+    return 0
+
+
 def _has_run(toks: tuple[str, ...], run: tuple[str, ...]) -> bool:
     n = len(run)
     return n > 0 and any(toks[i:i + n] == run for i in range(len(toks) - n + 1))
@@ -810,11 +821,10 @@ class Engine:
             return None
         # A kept term opening the span ("<brand> <barrio>" in a purchase description) is not a
         # person: registering the longer span would turn every later mention of the brand into one.
-        for n in range(len(words), 1, -1):
-            if " ".join(norm(w) for w in words[:n]) in _KEPT_NORM:
-                lead = text[s0:toks[i + n - 1][1]]
-                self.kept_seen.setdefault(lead, set()).add(ctx.record_id)
-                return None
+        n = kept_lead(words)
+        if n:
+            self.kept_seen.setdefault(text[s0:toks[i + n - 1][1]], set()).add(ctx.record_id)
+            return None
         start, end = s0, toks[j - 1][1]
         surf = text[start:end]
         if norm(surf) in _KEPT_NORM or self._is_kept_at(text, start, end):
