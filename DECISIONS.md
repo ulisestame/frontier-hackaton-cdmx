@@ -19,7 +19,7 @@ Todo dato que identifica a una persona natural, dondequiera que aparezca: column
 | Celulares | Mismo formato (+57, espacios, guiones), prefijo móvil válido y lejos del original. |
 | Direcciones | Misma forma (calle, carrera, diagonal; completa o abreviada; apartamento, oficina, casa), con números distintos. |
 | Fechas de nacimiento | Se corren entre 200 y 1.500 días y conservan su formato: ISO, día/mes/año, mes/día/año en los documentos en inglés, "d de mes de año". |
-| Placas, pasaportes, cuentas y tarjetas | Mismo formato. Las tarjetas siguen siendo válidas por Luhn. |
+| Placas y pasaportes | Mismo formato. |
 | Usuarios y handles: menciones `@usuario`, agente de un PQR | Un handle con el patrón del original. |
 
 Ningún seudónimo puede coincidir con un valor real de otra persona. Todos los valores reales del registro se reservan antes de generar, también entre tipos de dígitos (cédula, celular, cuenta), porque el jurado compara cadenas de dígitos sin importar su tipo.
@@ -73,6 +73,7 @@ Ningún seudónimo puede coincidir con un valor real de otra persona. Todos los 
   - El resultado es reproducible, aunque puede no ser el que elegiría una persona.
   - Un nombre de pila suelto que nada decide puede quedar como está, porque no identifica por sí solo.
   - En el corpus real, la calificación local reporta 18 casos ambiguos.
+- **Cuentas y tarjetas sin detector.** Ninguna regla de esta versión registra números de cuenta ni de tarjeta. El generador de seudónimos ya los soporta: conserva el formato y deja las tarjetas válidas por Luhn.
 - **Un solo volumen y una sola réplica.** Perder el volumen sin respaldo rompería la continuidad de los seudónimos. El secreto los hace deterministas, pero el mapa persistido resuelve colisiones y unicidad.
 - **Siguiente paso:**
   - un modelo de lenguaje solo para el residuo ambiguo, con caché y fail-closed;

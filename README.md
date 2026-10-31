@@ -14,7 +14,7 @@ El porqué de cada decisión está en [DECISIONS.md](DECISIONS.md). El documento
   - Normaliza chats, documentos (md, html, pdf) y tablas (CSV y XML) al esquema de salida, y reconcilia los ids con `record_index`.
 - **Registro de identidades** (`src/anon/core/engine.py`). Las tablas son el ancla. Una persona se reconoce por sus identificadores duros (cédula, correo, celular, llaves `CL-`, `KP-`, `PQR-`, `TX-`, `PG-`). Dos homónimos nunca se funden por el nombre.
 - **Detección** (`engine.py`).
-  - Reglas para nombres conocidos y desconocidos, correos (también deletreados), celulares, cédulas, direcciones, fechas de nacimiento, placas, pasaportes, tarjetas y cuentas, handles y slugs en nombres de archivo.
+  - Reglas para nombres conocidos y desconocidos, correos (también deletreados), celulares, cédulas, direcciones, fechas de nacimiento, placas, pasaportes, handles y slugs en nombres de archivo.
   - Una lista de organizaciones, marcas, lugares y figuras públicas se conserva.
 - **Seudónimos** (`src/anon/fakes.py`). HMAC(secreto, persona) decide cada valor, con el formato y la categoría del original. El mapa se persiste: una persona ya publicada conserva su seudónimo cuando las fuentes crecen.
 - **Autoverificación y salida** (`src/anon/core/pipeline.py`).
