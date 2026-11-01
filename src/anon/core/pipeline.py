@@ -114,7 +114,14 @@ def register_table_row(eng: Engine, r: dict) -> str | None:
     if r["table"] == "clientes":
         pid = eng.resolve_pid(f"cl:{c.get('cliente_id')}")
         if pid not in eng.persons:
-            eng.add_person(pid, "customer", c.get("nombre_completo", ""), city=c.get("ciudad", ""))
+            # A customer we already know, back under a new id (an acquired portfolio brings existing
+            # customers in with its own ids): the same cédula is the same person, same pseudonym.
+            same = {eng.resolve_pid(x) for x in eng.id_index.get(("cedula", canon("cedula", c.get("num_doc", ""))), set())}
+            same = {x for x in same if x in eng.persons and eng.persons[x].kind == "customer"}
+            if len(same) == 1:
+                eng.alias[pid] = pid = next(iter(same))
+            else:
+                eng.add_person(pid, "customer", c.get("nombre_completo", ""), city=c.get("ciudad", ""))
         if c.get("ciudad") and c.get("barrio"):
             # barrios of rows added after the corpus grows become detectable in free text
             fakes.register_barrio(c["ciudad"], c["barrio"])
@@ -279,6 +286,17 @@ def process_table_row(eng: Engine, r: dict) -> dict:
         if table == "pqrs":
             if k == "cedula" and v and p is not None:
                 out[k] = ident("cedula", v)
+                continue
+            if k == "cedula" and v:
+                # a PQR whose cliente_id is not in clientes: its cédula is still a person's
+                d = canon("cedula", v)
+                pids = eng.id_index.get(("cedula", d), set())
+                q = eng.person(eng.pick(pids, ctx, v)) if pids else eng.owner_for_unknown(ctx, "cedula", d)
+                if not pids:
+                    eng.index_id(q.pid, "cedula", d)
+                val = eng.pseudo("cedula", q, d)
+                out[k] = fakes.format_like(v, val)
+                eng.note(q, rid, v, "cedula", val)
                 continue
             if k == "agente" and v:
                 pids = eng.id_index.get(("handle", v.lower()), set())
