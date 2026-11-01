@@ -18,7 +18,7 @@ Todo dato que identifica a una persona natural, dondequiera que aparezca: column
 | Cédulas y documentos | Misma longitud y formato (puntos, prefijos), misma serie inicial y al menos la mitad de los dígitos distintos. |
 | Celulares | Mismo formato (+57, espacios, guiones), prefijo móvil válido y lejos del original. |
 | Direcciones | Misma forma (calle, carrera, diagonal; completa o abreviada; apartamento, oficina, casa), con números distintos. |
-| Fechas de nacimiento | Se corren entre 200 y 1.500 días y conservan su formato: ISO, día/mes/año, mes/día/año en los documentos en inglés, "d de mes de año". |
+| Fechas de nacimiento, también escritas en palabras ("12 de marzo de 1990") cuando son la fecha registrada de una persona | Se corren entre 200 y 1.500 días y conservan su formato: ISO, día/mes/año, mes/día/año en los documentos en inglés, "d de mes de año". |
 | Placas y pasaportes | Mismo formato. |
 | Cuentas bancarias, tarjetas y pólizas, tras una palabra clave (cuenta, ahorros, corriente, tarjeta, débito, crédito, póliza) | Mismo agrupamiento de dígitos; las tarjetas quedan válidas por Luhn. |
 | Direcciones IPv4 | Otra dirección IPv4, siempre la misma para la misma IP. |
@@ -83,7 +83,6 @@ Ningún seudónimo puede coincidir con un valor real de otra persona. Todos los 
 - **Casos ambiguos de nombres.** A veces una mención puede ser de varias personas y el registro no lo decide. Se resuelve con desempates deterministas: el contexto del registro y del hilo, los identificadores duros y luego reglas fijas.
   - El resultado es reproducible, aunque puede no ser el que elegiría una persona.
   - Un nombre de pila suelto que solo una persona lleva recibe su seudónimo. Los 11 nombres de pila sueltos que comparten dos o más personas quedan como están, porque no identifican por sí solos.
-- **Fechas de nacimiento escritas en palabras.** Todavía no se reemplazan; la corrección está lista, sin desplegar.
 - **Cuasi-identificadores de empleados.** El cargo, la ciudad y el año de ingreso de los empleados no se generalizan.
 - **Un solo volumen y una sola réplica.** Perder el volumen sin respaldo rompería la continuidad de los seudónimos. El secreto los hace deterministas, pero el mapa persistido resuelve colisiones y unicidad.
 - **Siguiente paso:**
