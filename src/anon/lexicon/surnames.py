@@ -104,6 +104,7 @@ Villalobos Villamil Villamizar Villanueva Villaquirán Villarraga Villarreal Vil
 Vivas Viveros
 Yances Yanes Yáñez Yate Yepes Yusti
 Zabala Zabaleta Zambrano Zamora Zamudio Zapata Zarama Zárate Zea Zuleta Zuluaga Zúñiga
+Arango Builes Osorno Ossa Upegui Usme Gallón Pulgarín Vasco Yarce Bolaño Berrío Calderón Ochoa
 """)
 
 SURNAME_NO_GENERATE = set(_words("""
@@ -113,7 +114,7 @@ Salas Ramos Santos Reyes Rey Iglesias Leal Lobo Bravo Gallo Llano Llanos Lagos P
 Guerrero Cabezas Paredes Feria Espejo Alegría Ventura Amado Conde Duque Franco Calvo Bello
 Rubio Romero Robles Manzano Pinto Mesa Mina Nieves Cuervo Fierro Infante Pastor Gracia
 Fuertes Colorado Cortina Mozo Pino Polo Junco Granda Coral Cabra Abril Alba Ángel Candela
-Bolívar Santander Córdoba Toledo Madrid Cuenca Porto Lara
+Bolívar Santander Córdoba Toledo Madrid Cuenca Porto Lara Oviedo
 Petro Uribe Pastrana Gaviria Samper Escobar Gaitán Galán Botero Valderrama Asprilla Ibargüen
 Mutis Carulla Uribe Vives Higuita Pajón Falcao
 """))

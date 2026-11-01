@@ -398,6 +398,8 @@ def occupation_sector(occupation: str, gender: str | None = None) -> str:
     insensitive; unknown -> 'trabajador independiente' ('trabajadora' when the form or the
     gender says F). English terms get English sector phrases."""
     k = normalize_token(occupation)
+    if not k:
+        return ""
     k = re.sub(r"^(?:yo\s+)?(?:soy|trabajo\s+como|un|una|el|la|i\s+am\s+an?|i'm\s+an?|an?)\s+", "", k)
     if k in _SECTOR_BY_PHRASE:  # already generalized: idempotent
         sector, lang = _SECTOR_BY_PHRASE[k], ("en" if k in _EN_PHRASES else "es")
@@ -892,8 +894,16 @@ class PseudonymFactory:
             if kind == "name":
                 self.add_blocked(str(v).split())
 
+    _DIGIT_KINDS = ("cedula", "phone", "account")
+
     def _free(self, kind: str, value: str) -> bool:
-        return value not in self.taken[kind] and value not in self.reserved[kind]
+        if value in self.taken[kind] or value in self.reserved[kind]:
+            return False
+        # the judge matches digit strings whatever their kind: a pseudonym account must not
+        # equal a real cédula or phone either
+        if kind in self._DIGIT_KINDS:
+            return all(value not in self.reserved[k] for k in self._DIGIT_KINDS)
+        return True
 
     def pool_sizes(self) -> dict[str, int]:
         """Names still usable after blocking (what the >=400/>=400/>=600 targets refer to)."""

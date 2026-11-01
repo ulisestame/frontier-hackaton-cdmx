@@ -74,26 +74,49 @@ def redact(text: str) -> str:
     return text
 
 
+_UNSUMMARIZED = frozenset({"exc", "traceback"})
+
+
+def _summary(name: str, fields: dict, exc_text: str | None) -> str:
+    """Readable one-liner for log viewers that display `message` (Railway): event key=value ..."""
+    parts = [name]
+    for key, value in fields.items():
+        if key in _UNSUMMARIZED or value is None:
+            continue
+        text = value if isinstance(value, str) else json.dumps(value, ensure_ascii=False, default=str)
+        parts.append(f"{key}={text[:200]}{'...' if len(text) > 200 else ''}")
+    exc_lines = str(exc_text or "").strip().splitlines()
+    if exc_lines:
+        parts.append("| " + exc_lines[-1])
+    return " ".join(parts)
+
+
 class JsonFormatter(logging.Formatter):
-    """One JSON object per line: ts, level, proc, logger, event, plus the record's fields."""
+    """One JSON object per line: message (readable summary), event, level, proc, logger, ts and the fields.
+
+    Railway parses JSON log lines and shows `message`; the other keys stay filterable attributes.
+    """
 
     def __init__(self, proc: str) -> None:
         super().__init__()
         self.proc = proc
 
     def format(self, record: logging.LogRecord) -> str:
+        name = record.getMessage()
+        fields = getattr(record, "fields", None)
+        fields = fields if isinstance(fields, dict) else {}
+        exc_text = self.formatException(record.exc_info) if record.exc_info else None
         payload: dict[str, Any] = {
-            "ts": utc_now_iso(record.created),
+            "message": _summary(name, fields, exc_text or fields.get("traceback")),
+            "event": name,
             "level": record.levelname.lower(),
+            "ts": utc_now_iso(record.created),
             "proc": self.proc,
             "logger": record.name,
-            "event": record.getMessage(),
         }
-        fields = getattr(record, "fields", None)
-        if isinstance(fields, dict):
-            payload.update(fields)
-        if record.exc_info:
-            payload["exc"] = self.formatException(record.exc_info)
+        payload.update(fields)
+        if exc_text:
+            payload["exc"] = exc_text
         return redact(json.dumps(payload, ensure_ascii=False, default=str))
 
 

@@ -34,9 +34,9 @@ SERVER=("${PY[@]}" -m uvicorn anon.api:app
   --no-access-log --proxy-headers --forwarded-allow-ips '*'
   --timeout-keep-alive 75 --timeout-graceful-shutdown 10)
 
-log() {  # log LEVEL EVENT [EXTRA_JSON_FIELDS]
-  printf '{"ts":"%s","level":"%s","proc":"run.sh","event":"%s"%s}\n' \
-    "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$1" "$2" "${3:-}"
+log() {  # log LEVEL EVENT DETAIL [EXTRA_JSON_FIELDS]; Railway shows "message"
+  printf '{"message":"%s %s","event":"%s","level":"%s","ts":"%s","proc":"run.sh"%s}\n' \
+    "$2" "$3" "$2" "$1" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "${4:-}"
 }
 
 child=0
@@ -50,7 +50,8 @@ on_signal() {
 trap on_signal TERM INT HUP
 
 fast_failures=0
-log info server.start ",\"host\":\"$HOST\",\"port\":$PORT,\"state_dir\":\"$STATE_DIR\""
+log info server.start "host=$HOST port=$PORT state_dir=$STATE_DIR" \
+  ",\"host\":\"$HOST\",\"port\":$PORT,\"state_dir\":\"$STATE_DIR\""
 while :; do
   started=$(date +%s)
   "${SERVER[@]}" &
@@ -63,16 +64,16 @@ while :; do
   done
   child=0
   if [ "$stopping" -eq 1 ]; then
-    log info server.stopped ",\"rc\":$rc"
+    log info server.stopped "rc=$rc" ",\"rc\":$rc"
     exit 0
   fi
   uptime=$(( $(date +%s) - started ))
   if [ "$uptime" -lt 10 ]; then fast_failures=$((fast_failures + 1)); else fast_failures=0; fi
   if [ "$fast_failures" -ge 5 ]; then
-    log error server.giving_up ",\"rc\":$rc,\"detail\":\"server exited 5 times in a row within 10 s of starting\""
+    log error server.giving_up "rc=$rc: server exited 5 times in a row within 10 s of starting" ",\"rc\":$rc"
     exit 1
   fi
-  log error server.exited ",\"rc\":$rc,\"uptime_s\":$uptime,\"action\":\"restarting in 1 s\""
+  log error server.exited "rc=$rc uptime_s=$uptime, restarting in 1 s" ",\"rc\":$rc,\"uptime_s\":$uptime"
   sleep 1
   if [ "$stopping" -eq 1 ]; then
     exit 0

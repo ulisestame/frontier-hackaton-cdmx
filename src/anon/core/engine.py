@@ -611,17 +611,17 @@ class Engine:
 
     def generalize_quasi(self, text: str) -> str:
         """Occupation + barrio + year in a self-description: generalize all three."""
-        found = False
-        out = text
-        for term in sorted(fakes.OCCUPATION_TERMS, key=len, reverse=True):
-            for m in re.finditer(rf"(?i)(?<![\w]){re.escape(term)}(?![\w])", out):
-                if OCC_CUE.search(out[max(0, m.start() - 40):m.start()]):
-                    sector = fakes.occupation_sector(m.group())
-                    out = out[:m.start()] + sector + out[m.end():]
-                    found = True
-                    break
-        if not found:
+        # One precompiled alternation (longest term first) instead of one regex per term:
+        # the per-term loop recompiled ~1,000 patterns per text (the re cache holds 512).
+        # Spans are found on the original text and replaced right-to-left, so a sector
+        # phrase already written ("estudiante de educación superior") is never re-matched.
+        spans = [m for m in fakes.OCCUPATION_RX.finditer(text)
+                 if OCC_CUE.search(text[max(0, m.start() - 40):m.start()])]
+        if not spans:
             return text
+        out = text
+        for m in reversed(spans):
+            out = out[:m.start()] + fakes.occupation_sector(m.group()) + out[m.end():]
         for barrio_norm, city in fakes.CITY_OF_BARRIO.items():
             if len(barrio_norm) < 4:
                 continue
