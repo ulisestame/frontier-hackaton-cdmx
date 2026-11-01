@@ -112,6 +112,9 @@ def build_registry(eng: Engine, corpus) -> dict:
             pid = f"cl:{c.get('cliente_id')}"
             if pid not in eng.persons:
                 eng.add_person(pid, "customer", c.get("nombre_completo", ""), city=c.get("ciudad", ""))
+            if c.get("ciudad") and c.get("barrio"):
+                # barrios of rows added after the corpus grows become detectable in free text
+                fakes.register_barrio(c["ciudad"], c["barrio"])
             for kind, col in (("cedula", "num_doc"), ("email", "correo"), ("phone", "celular"),
                               ("address", "direccion"), ("birth", "fecha_nacimiento")):
                 eng.index_id(pid, kind, c.get(col, ""))
