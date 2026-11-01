@@ -1,0 +1,42 @@
+# Secrets
+.env
+.env.*
+
+# Source data, challenge material and generated output (never published)
+data/
+material-reto/
+output/
+state/
+*.sqlite
+*.sqlite3
+*.db
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+.ruff_cache/
+*.egg-info/
+
+# Deploy tooling
+.vercel/
+.railway/
+
+# Editor / OS
+.DS_Store
+.idea/
+.vscode/
+
+# Local tool configuration (not part of the project)
+CLAUDE.md
+CLAUDE.local.md
+AGENTS.md
+GEMINI.md
+.claude/
+.cursor/
+.cursorrules
+.clinerules
+.windsurfrules
+.aider*
+.github/copilot-instructions.md
