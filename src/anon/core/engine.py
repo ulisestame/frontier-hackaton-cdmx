@@ -172,6 +172,10 @@ class Ctx:
     owner: str | None = None  # the person a record is about (table row owner / thread customer)
     near: set[str] = field(default_factory=set)  # persons in context (thread participants, row owner)
     filename: bool = False
+    # Every text of the record (all fields), and the persons it names in full or by a hard
+    # identifier: computed on the first given-name-only mention that needs it.
+    record_text: str = ""
+    named: set[str] | None = None
 
 
 class Engine:
@@ -547,12 +551,46 @@ class Engine:
             return True
         return all(s.strip() == "" and 0 < len(s) <= 3 for s in seps)
 
+    def named_in(self, text: str) -> set[str]:
+        """Persons a text names in full (a known form with a surname and a single
+        candidate) or points to by a hard identifier (e-mail, cédula, phone, record key)."""
+        out = set(self.evidence(text))
+        toks = [(m.start(), m.end(), m.group(), norm(m.group())) for m in TOKEN_RX.finditer(text)]
+        i = 0
+        while i < len(toks):
+            best = None
+            for ftoks, ng, ns, pid in self.name_index.get(toks[i][3], []):
+                n = len(ftoks)
+                if i + n > len(toks) or (best and n < best[0]):
+                    continue
+                if all(toks[i + k][3] == ftoks[k] for k in range(n)) and self._gaps_ok(text, toks, i, n):
+                    if best is None or n > best[0]:
+                        best = (n, ns, {self.resolve_pid(pid)})
+                    elif n == best[0]:
+                        best[2].add(self.resolve_pid(pid))
+            if best:
+                n, ns, pids = best
+                start, end = toks[i][0], toks[i + n - 1][1]
+                if ns > 0 and len(pids) == 1 and not self._is_kept_at(text, start, end):
+                    out |= pids
+                i += n
+            else:
+                i += 1
+        return out
+
     def _weak_pick(self, pids, ctx, text, start, surf) -> str | None:
         pids = {self.resolve_pid(p) for p in pids}
         near = {self.resolve_pid(x) for x in ([ctx.author, ctx.owner] + list(ctx.near)) if x}
         hit = pids & near
         if not surf[:1].isupper() and not ctx.filename:
             return None
+        # Two-pass over the record: a given-name-only mention ("Tomás Felipe", "Joaquín")
+        # goes to the one candidate the same record names in full or by a hard identifier.
+        if ctx.named is None:
+            ctx.named = {self.resolve_pid(x) for x in self.named_in(ctx.record_text or text)}
+        named = pids & ctx.named
+        if len(named) == 1:
+            return next(iter(named))
         if len(hit) == 1:
             return next(iter(hit))
         if NAME_CUE.search(text[max(0, start - 40):start]) and len(pids) == 1:

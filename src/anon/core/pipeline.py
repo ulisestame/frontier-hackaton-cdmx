@@ -21,7 +21,7 @@ from typing import Callable
 
 from .. import fakes
 from .engine import TABLE_KEY_RX, Ctx, Engine, Person, canon, norm
-from .textnorm import contains, is_bare_name, record_text
+from .textnorm import Prepared, contains, is_bare_name, record_text
 
 SECRET = os.environ.get("ANON_SECRET", "kipu-frontier-2026-secret").encode()
 STATE_FILE = "state.json"
@@ -215,7 +215,8 @@ def process_table_row(eng: Engine, r: dict) -> dict:
     table = r["table"]
     owner_pids = eng.id_index.get(("key", c.get("cliente_id") or c.get("id") or ""), set())
     owner = eng.resolve_pid(next(iter(owner_pids))) if owner_pids else None
-    ctx = Ctx(record_id=rid, owner=owner, near={owner} if owner else set())
+    ctx = Ctx(record_id=rid, owner=owner, near={owner} if owner else set(),
+              record_text=" | ".join(str(v) for v in c.values() if v))
     out = {}
     p = eng.persons.get(owner) if owner else None
 
@@ -288,8 +289,8 @@ def process_doc(eng: Engine, d: dict) -> dict:
     whole = " ".join([d.get("filename", ""), d.get("title", ""), d.get("body", "")] +
                      [str(v) for v in d.get("metadata", {}).values()])
     near = eng.evidence(whole)
-    ctx = Ctx(record_id=d["id"], near=near)
-    fctx = Ctx(record_id=d["id"], near=near, filename=True)
+    ctx = Ctx(record_id=d["id"], near=near, record_text=whole)
+    fctx = Ctx(record_id=d["id"], near=near, filename=True, record_text=whole)
     return {
         "id": d["id"],
         "format": d["format"],
@@ -307,7 +308,8 @@ def process_chat(eng: Engine, m: dict, threads: dict) -> dict:
         author_pid = None
     if author_pid and eng.persons[author_pid].kind in ("customer", "user"):
         owner = author_pid
-    ctx = Ctx(record_id=m["id"], author=author_pid, owner=owner, near=near)
+    rtext = " ".join([m.get("text", "")] + [a.get("filename", "") for a in m.get("attachments", [])])
+    ctx = Ctx(record_id=m["id"], author=author_pid, owner=owner, near=near, record_text=rtext)
     author = m.get("author", "")
     if author_pid and not m.get("_is_bot"):
         p = eng.persons[author_pid]
@@ -316,7 +318,7 @@ def process_chat(eng: Engine, m: dict, threads: dict) -> dict:
         eng.note(p, m["id"], author, "name", author_out)
     else:
         author_out = eng.anonymize_text(author, ctx) if author else author
-    fctx = Ctx(record_id=m["id"], author=author_pid, owner=owner, near=near, filename=True)
+    fctx = Ctx(record_id=m["id"], author=author_pid, owner=owner, near=near, filename=True, record_text=rtext)
     return {
         "id": m["id"],
         "thread_id": m["thread_id"],
@@ -331,8 +333,9 @@ def process_chat(eng: Engine, m: dict, threads: dict) -> dict:
 
 class Haystack:
     def __init__(self, records: list[dict]):
-        self.by_id = {r["id"]: record_text(r) for r in records}
-        self.whole = "\n".join(self.by_id.values())
+        # Prepared: normalize each record and the whole output once, not on every question
+        self.by_id = {r["id"]: Prepared(record_text(r)) for r in records}
+        self.whole = Prepared("\n".join(p.raw for p in self.by_id.values()))
 
     def has(self, needle: str) -> bool:
         return contains(self.whole, needle)
