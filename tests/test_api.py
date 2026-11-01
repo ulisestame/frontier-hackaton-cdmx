@@ -73,8 +73,8 @@ def anonymize_live(source, records, state_dir):
                                           "records": [r["id"] for r in records]}]}
 '''
 
-CHAT = {"id": "msg-1", "thread_id": "soporte:1.0001", "author": "Manuela", "ts": "1785769807.000100",
-        "text": "Hola, me llamo Manuela.", "attachments": [{"filename": "recibo.pdf"}]}
+CHAT = {"id": "msg-1", "thread_id": "soporte:1.0001", "author": "Leocadia", "ts": "1790000000.000100",
+        "text": "Hola, me llamo Leocadia.", "attachments": [{"filename": "recibo.pdf"}]}
 DOC = {"id": "doc_03", "format": "md", "filename": "acta.md", "title": "Acta", "body": "texto",
        "metadata": {"author": "alguien@example.com"}}
 ROW = {"id": "clientes:CL-1", "table": "clientes", "columns": {"nombre": "Ana", "edad": 34}}
