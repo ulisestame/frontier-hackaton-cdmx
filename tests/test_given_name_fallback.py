@@ -11,11 +11,11 @@ SECRET = b"given-fallback-test"
 
 def _engine() -> Engine:
     eng = Engine(fakes.PseudonymFactory(SECRET))
-    eng.add_person("emp:1", "employee", "Sebastián Iturbe Ledezma", city="Medellín")
-    eng.add_person("cl:1", "customer", "Brayan Zubiría Villoria", city="Medellín")
-    eng.add_person("emp:2", "employee", "Brayan Villoria Zubiría", city="Cali")
+    eng.add_person("emp:1", "employee", "Leopoldo Iturbe Ledezma", city="Medellín")
+    eng.add_person("cl:1", "customer", "Eustaquio Zubiría Villoria", city="Medellín")
+    eng.add_person("emp:2", "employee", "Eustaquio Villoria Zubiría", city="Cali")
     eng.add_person("cl:2", "customer", "Julio Barragán Tobón", city="Cali")
-    eng.f = fakes.PseudonymFactory(SECRET, {"sebastian", "iturbe", "ledezma", "brayan", "zubiria", "villoria",
+    eng.f = fakes.PseudonymFactory(SECRET, {"leopoldo", "iturbe", "ledezma", "eustaquio", "zubiria", "villoria",
                                             "julio", "barragan", "tobon"})
     return eng
 
@@ -26,25 +26,25 @@ def _run(eng: Engine, text: str, rid: str = "doc") -> str:
 
 def test_single_carrier_without_context_is_replaced():
     eng = _engine()
-    out = _run(eng, "Antes de eso, Sebastián entrega el tablero de pares.")
-    assert "Sebastián" not in out
-    assert out.startswith("Antes de eso, ") and out.endswith(" entrega el tablero de pares.")
+    out = _run(eng, "Mañana Leopoldo revisa el informe de cierre.")
+    assert "Leopoldo" not in out
+    assert out.startswith("Mañana ") and out.endswith(" revisa el informe de cierre.")
     assert "doc" in eng.persons["emp:1"].records
 
 
 def test_a_given_name_that_opens_an_unknown_full_name_is_not_given_to_the_carrier():
     eng = _engine()
-    for rid, text in (("m0", "Sebastián Ozámiz llamó ayer."), ("m1", "Ayer hablé con Sebastián Ozámiz del caso.")):
+    for rid, text in (("m0", "Leopoldo Ozámiz llamó ayer."), ("m1", "Ayer hablé con Leopoldo Ozámiz del caso.")):
         out = _run(eng, text, rid)
-        assert "Sebastián" not in out and "Ozámiz" not in out  # the whole unknown name is replaced
+        assert "Leopoldo" not in out and "Ozámiz" not in out  # the whole unknown name is replaced
         assert rid not in eng.persons["emp:1"].records
 
 
 def test_several_carriers_are_left_as_before_and_add_no_entity():
     eng = _engine()
     before = set(eng.persons)
-    out = _run(eng, "Buenas tardes Brayan, te atiende el equipo.", "m1")
-    assert "Brayan" in out
+    out = _run(eng, "Buenas tardes Eustaquio, te atiende el equipo.", "m1")
+    assert "Eustaquio" in out
     assert set(eng.persons) == before
     assert "m1" not in eng.persons["cl:1"].records and "m1" not in eng.persons["emp:2"].records
 
@@ -57,8 +57,8 @@ def test_a_given_name_that_is_also_a_month_needs_a_cue():
 
 def test_resolved_mentions_are_unchanged():
     eng = _engine()
-    text = "Brayan Villoria Zubiría atiende hoy. Gracias, Brayan."
+    text = "Eustaquio Villoria Zubiría atiende hoy. Gracias, Eustaquio."
     out = _run(eng, text, "m3")
-    full = eng.render_name(eng.persons["emp:2"], 1, 2, "Brayan Villoria", text, 0, 15)
+    full = eng.render_name(eng.persons["emp:2"], 1, 2, "Eustaquio Villoria", text, 0, 18)
     assert out.split(".")[0].startswith(full.split()[0])  # the record names emp:2 in full
-    assert "Brayan" not in out
+    assert "Eustaquio" not in out
