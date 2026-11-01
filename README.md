@@ -12,13 +12,14 @@ El porqué de cada decisión está en [DECISIONS.md](DECISIONS.md). El documento
 - **Ingesta** (`src/anon/sources.py`, `src/anon/parse.py`).
   - Descarga el API de fuentes bajo su límite de 600 peticiones por minuto, en una carpeta temporal que se mueve de forma atómica.
   - Normaliza chats, documentos (md, html, pdf) y tablas (CSV y XML) al esquema de salida, y reconcilia los ids con `record_index`.
-- **Registro de identidades** (`src/anon/core/engine.py`). Las tablas son el ancla. Una persona se reconoce por sus identificadores duros (cédula, correo, celular, llaves `CL-`, `KP-`, `PQR-`, `TX-`, `PG-`). Dos homónimos nunca se funden por el nombre.
+- **Registro de identidades** (`src/anon/core/engine.py`). Las tablas son el ancla. Una persona se reconoce por sus identificadores duros (cédula, correo, celular, llaves `CL-`, `KP-`, `PQR-`, `TX-`, `PG-`). Un perfil de chat sin correo que coincida se une solo si su nombre completo coincide exacto con una única persona; ante homónimos decide la evidencia del hilo. Dos homónimos nunca se funden por el nombre.
 - **Detección** (`engine.py`).
-  - Reglas para nombres conocidos y desconocidos, correos (también deletreados), celulares, cédulas, direcciones, fechas de nacimiento, placas, pasaportes, handles y slugs en nombres de archivo.
+  - Reglas para nombres conocidos y desconocidos, correos (también deletreados), celulares, cédulas, direcciones, fechas de nacimiento ya registradas, placas, pasaportes, números de cuenta bancaria y de tarjeta (Luhn) junto a palabras clave, pólizas, direcciones IPv4, "inicial + apellido" de una persona conocida, handles y slugs en nombres de archivo.
   - Una lista de organizaciones, marcas, lugares y figuras públicas se conserva.
+- **Vinculación** (`engine.py`). Cada mención va a una persona por autor, dueño del registro, participantes del hilo y evidencia dura (correo, cédula, celular, llave, fecha + monto de una transacción); en documentos decide primero la línea de la mención. Entre un cliente y un empleado con el mismo nombre corto decide el contexto. Al vincular usuarios de chat: filtro por tipo, pase de eliminación y evidencia dura contra la fila maestra. Un nombre de pila que solo una persona lleva recibe su seudónimo.
 - **Seudónimos** (`src/anon/fakes.py`). HMAC(secreto, persona) decide cada valor, con el formato y la categoría del original. El mapa se persiste: una persona ya publicada conserva su seudónimo cuando las fuentes crecen.
 - **Autoverificación y salida** (`src/anon/core/pipeline.py`).
-  - Antes de publicar, cada forma real se busca en toda la salida con el criterio del validador oficial.
+  - Antes de publicar, cada forma real se busca en toda la salida con el criterio del validador oficial. Lo que aparece se repara: se reemplaza por el seudónimo de esa persona y la salida se vuelve a verificar. Lo que aún quede no se declara en `entities.json` y va a `report.json`.
   - Los cuatro archivos se escriben aparte y se publican de golpe.
 - **Corrida en un proceso aparte, estado en un volumen** (`src/anon/api.py`, `jobs.py`, `cli.py`).
   - `POST /v1/run` lanza el pipeline en un proceso supervisado: se relanza si muere y se corta a los 115 minutos.
@@ -85,7 +86,9 @@ Ajustes avanzados:
    uv run python scripts/check_local.py real     # corpus real: validador + 5 tests públicos
    ```
 
-Resultados de esta versión:
+Corridas oficiales: 1 (14:59, antes del crecimiento de las fuentes) 62/95 tests; 2 (17:33) 111/156; 3 (17:58, 100 % del set) 161/205 (78,5 %): fáciles 91/94, regulares 45/68, difíciles 25/43.
+
+Resultados locales:
 - **Real:** validador OK y 5/5 tests públicos.
 - **Muestra:** validador OK y 12/13. `sample_01` también falla con la salida ideal, porque el runner local solo acepta el nombre completo del seudónimo.
 
