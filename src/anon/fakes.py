@@ -939,7 +939,7 @@ class PseudonymFactory:
             self._memo[k].update(mem)
         for rec in self._memo["name"].values():
             self._take_name(rec["given"], rec["surnames"])
-        for kind in ("email", "cedula", "phone", "plate", "passport", "account", "handle"):
+        for kind in ("email", "cedula", "phone", "plate", "passport", "account", "handle", "birth"):
             self.taken[kind].update(v for v in self._memo[kind].values() if isinstance(v, str))
 
     # ------------------------------------------------------------ names --
@@ -1329,12 +1329,14 @@ class PseudonymFactory:
                     if 1900 <= c.year and c <= limit:
                         nd = c
                         break
-                if nd is not None and nd.isoformat() not in self.reserved["birth"]:
+                # never a real date, and never a date another person already holds
+                if nd is not None and self._free("birth", nd.isoformat()):
                     val = nd.isoformat()
                     break
             else:
                 val = (d - _dt.timedelta(days=1099)).isoformat()
             self._memo["birth"][mk] = val
+            self.taken["birth"].add(val)
         return val
 
     def _any_iso(self, s: str) -> str | None:

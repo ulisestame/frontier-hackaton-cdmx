@@ -20,7 +20,7 @@ from pathlib import Path
 from typing import Callable
 
 from .. import fakes
-from .engine import TABLE_KEY_RX, Ctx, Engine, Person, canon, norm
+from .engine import TABLE_KEY_RX, Ctx, Engine, Person, canon, kept_lead, norm
 from .textnorm import Prepared, contains, is_bare_name, record_text
 
 SECRET = os.environ.get("ANON_SECRET", "kipu-frontier-2026-secret").encode()
@@ -75,7 +75,8 @@ def save_state(state_dir: Path, engine: Engine, entity_ids: dict) -> None:
         "persons": {
             pid: {
                 "kind": p.kind, "given": p.given, "surnames": p.surnames, "gender": p.gender,
-                "city": p.city, "ids": {k: sorted(v) for k, v in p.ids.items()},
+                "city": p.city, "occupation": p.occupation, "barrio": p.barrio,
+                "ids": {k: sorted(v) for k, v in p.ids.items()},
             }
             for pid, p in engine.persons.items()
         },
@@ -91,8 +92,13 @@ def engine_from_state(state: dict) -> Engine:
     eng = Engine(factory)
     eng.memo = dict(state.get("memo", {}))
     for pid, d in state.get("persons", {}).items():
+        if d["kind"] == "external" and kept_lead(d["given"] + d["surnames"]):
+            # a kept term an earlier version read as a name ("<brand> <barrio>"): not a person,
+            # and loading it would make every later mention of the brand match its short form
+            continue
         p = Person(pid=pid, kind=d["kind"], given=d["given"], surnames=d["surnames"],
-                   gender=d.get("gender"), city=d.get("city", ""))
+                   gender=d.get("gender"), city=d.get("city", ""),
+                   occupation=d.get("occupation", ""), barrio=d.get("barrio", ""))
         eng.persons[pid] = p
         eng.index_names(p)
         for kind, vals in d.get("ids", {}).items():
@@ -125,6 +131,9 @@ def register_table_row(eng: Engine, r: dict) -> str | None:
         if c.get("ciudad") and c.get("barrio"):
             # barrios of rows added after the corpus grows become detectable in free text
             fakes.register_barrio(c["ciudad"], c["barrio"])
+        person = eng.persons[pid]
+        person.occupation = person.occupation or c.get("ocupacion", "")
+        person.barrio = person.barrio or c.get("barrio", "")
         for kind, col in (("cedula", "num_doc"), ("email", "correo"), ("phone", "celular"),
                           ("address", "direccion"), ("birth", "fecha_nacimiento")):
             eng.index_id(pid, kind, c.get(col, ""))
@@ -161,6 +170,9 @@ def build_registry(eng: Engine, corpus) -> dict:
                 eng.index_id(pid, "cedula", c["cedula"])
         elif r["table"] == "transacciones" and owner:
             eng.index_id(next(iter(owner)), "key", c.get("tx_id", ""))
+            if c.get("fecha") and c.get("monto"):
+                amount = re.sub(r"\D", "", str(c["monto"]).split(".")[0].split(",")[0])
+                eng.tx_index.setdefault((c["fecha"][:10], amount), set()).update(owner)
 
     # chat users -> registry persons
     ambiguous: dict[str, set[str]] = {}
@@ -196,10 +208,13 @@ def build_registry(eng: Engine, corpus) -> dict:
         if m.get("_user") and not m.get("_is_bot"):
             t["users"].append(m["_user"])
         t["text"].append(m.get("text", ""))
+        t["text"].extend(a.get("filename", "") for a in m.get("attachments", []))  # ids inside file names count
     for upid, cands in ambiguous.items():
         uid = upid[2:]
         text = "\n".join(x for t in threads.values() if uid in t["users"] for x in t["text"])
         ev = eng.evidence(text) & cands
+        if not ev:  # a date and an amount that match one homonym's transaction
+            ev = eng.tx_evidence(text) & cands
         if len(ev) == 1:
             eng.merge(upid, next(iter(ev)))
     # Users with no name match (deactivated accounts, nicknames): link them only through hard
@@ -280,6 +295,14 @@ def process_table_row(eng: Engine, r: dict) -> dict:
                         "fecha_nacimiento": "birth"}[k]
                 out[k] = ident(kind, v)
                 continue
+            if k == "reporta_a" and v:
+                # The boss is a colleague: a customer who shares the short name must not take
+                # the relation. Resolved among employees only, rendered like any mention of them.
+                bosses = {b for b in eng.candidates_by_name(v) if b in eng.persons and eng.persons[b].kind == "employee"}
+                if len(bosses) == 1:
+                    boss = next(iter(bosses))
+                    out[k] = eng.anonymize_text(v, Ctx(record_id=rid, owner=boss, near={boss}, record_text=v))
+                    continue
             if k in ("id", "cargo", "ciudad", "ingreso") or k.endswith("_tipo"):
                 out[k] = v
                 continue

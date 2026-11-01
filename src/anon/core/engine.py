@@ -56,6 +56,8 @@ OCC_CUE = re.compile(
     r"mi\s+profesión\s+es|i\s+am\s+an?|i'm\s+an?|work\s+as\s+an?)\s+(?:un|una|el|la)?\s*$"
 )
 YEAR_RX = re.compile(r"(?<!\d)(19[5-9]\d|20[0-2]\d)(?!\d)")
+# a joining year: "en 2023", "desde 2021", "año 2022", "since 2023", "in 2023"
+YEAR_CTX_RX = re.compile(r"(?i)\b(en|desde|año|since|in)\s+(?:el\s+)?((?:19[5-9]|20[0-2])\d)(?!\d)")
 
 TOKEN_RX = re.compile(r"[^\W\d_]+(?:['’][^\W\d_]+)?")
 EMAIL_RX = re.compile(r"(?<![\w.+-])[A-Za-z0-9][A-Za-z0-9._%+-]*@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,}(?![\w-])")
@@ -78,10 +80,39 @@ ISO_DATE_RX = re.compile(r"(?<!\d)((?:19|20)\d{2})-(\d{2})-(\d{2})(?!\d)")
 SLASH_DATE_RX = re.compile(r"(?<!\d)(\d{2})/(\d{2})/((?:19|20)\d{2})(?!\d)")
 MENTION_RX = re.compile(r"<@([A-Z0-9]+)(?:\|[^>]*)?>")
 TABLE_KEY_RX = re.compile(r"\b(CL-\d{4,6}|PG-\d{4,6}|TX-\d{4,7}|PQR-\d{4}-\d{3,5}|KP-\d{3})\b")
+# Ties between people of different kinds (a customer and an employee who share a short name):
+# a role next to the mention, or the corporate mailbox, points to the colleague; a customer
+# record key points to the customer. ("cargo" is not a cue: in support text it means a charge.)
+ROLE_CUE = re.compile(
+    r"(?i)(?<![\w])(?:gerente|coordinador[a]?|analista de|l[ií]der de|agente de soporte|director[a]?|"
+    r"jef[ea] de|vicepresident[ea]|ingenier[oa] de|ceo|cto|cfo|coo|reporta a)(?![\w])")
+CUSTOMER_KEY_RX = re.compile(r"\b(?:CL-\d{4,6}|PG-\d{4,6}|TX-\d{4,7}|PQR-\d{4}-\d{3,5})\b")
+KIND_GROUP = {"customer": "customer", "user": "customer", "employee": "employee"}
+# Column headers of a table row: who the cells under them are.
+EMPLOYEE_HEADER = re.compile(r"(?i)(?<![\w])(?:agente|asesor[a]?|analista|responsable|empleado|colaborador[a]?|"
+                             r"funcionari[oa]|l[ií]der|coordinador[a]?|gerente|reporta a|atendid[oa] por)(?![\w])")
+CUSTOMER_HEADER = re.compile(r"(?i)(?<![\w])(?:client[ea]s?|titular|usuari[oa]|deudor[a]?)(?![\w])")
+TABLE_RULE_RX = re.compile(r"\s*\|?\s*:?-{3,}:?\s*(?:\|\s*:?-{3,}:?\s*)*\|?\s*")
 
 
 def ntoks(text: str) -> tuple[str, ...]:
     return tuple(norm(m.group()) for m in TOKEN_RX.finditer(text))
+
+
+def kept_lead(name) -> int:
+    """How many leading words of a name (a string or a list of name parts) form a kept term,
+    0 when none: "<brand> <barrio>" -> 2. At least two words, so a given name that happens to
+    be a one-word brand is not caught."""
+    words = " ".join(name if isinstance(name, (list, tuple)) else [name]).split()
+    for n in range(len(words), 1, -1):
+        if " ".join(norm(w) for w in words[:n]) in _KEPT_NORM:
+            return n
+    return 0
+
+
+def _has_run(toks: tuple[str, ...], run: tuple[str, ...]) -> bool:
+    n = len(run)
+    return n > 0 and any(toks[i:i + n] == run for i in range(len(toks) - n + 1))
 
 
 def is_given(token: str) -> bool:
@@ -127,6 +158,8 @@ class Person:
     surnames: list[str]
     gender: str | None = None
     city: str = ""
+    occupation: str = ""  # master-row values, to tell when a text points back at this person
+    barrio: str = ""
     ids: dict[str, set[str]] = field(default_factory=dict)
     originals: set[str] = field(default_factory=set)
     records: set[str] = field(default_factory=set)
@@ -195,6 +228,8 @@ class Engine:
         self.authors: dict[str, str] = {}
         # Pseudonym values the last run had already issued (set when loading its state).
         self.published: set[str] = set()
+        # (ISO date, amount) of each transaction -> its customers: a tie-breaker for homonyms
+        self.tx_index: dict[tuple[str, str], set[str]] = {}
 
     # ------------------------------------------------------------ registry --
     def resolve_pid(self, pid: str | None) -> str | None:
@@ -329,11 +364,170 @@ class Engine:
             if len(hit) == 1:
                 return next(iter(hit))
         if text:
-            ev = self.evidence(text) & pids
+            ev = (self.evidence(text) | self.tx_evidence(text) | self._own_handles(pids, text)) & pids
             if len(ev) == 1:
                 return next(iter(ev))
+        # Candidates of different kinds: the kind the mention's context points to decides; with
+        # no cue, customers first. The alphabetical fallback only ever chooses within one kind.
+        groups: dict[str, set[str]] = {}
+        for p in pids:
+            groups.setdefault(KIND_GROUP.get(self.persons[p].kind, "external") if p in self.persons else "external",
+                              set()).add(p)
+        pool = pids
+        if len(groups) > 1:
+            kind = self._kind_prior(pids, ctx, text)
+            if kind and len(groups.get(kind, ())) == 1:
+                return next(iter(groups[kind]))
+            pool = groups.get(kind or "") or groups.get("customer") or groups.get("employee") or pids
         self.warnings.append(f"ambiguous {sorted(pids)} in {ctx.record_id}")
-        return sorted(pids)[0]
+        return sorted(pool)[0]
+
+    def _own_handles(self, pids: set[str], text: str) -> set[str]:
+        """Candidates whose own handle (chat user name, mailbox name) is written in the text."""
+        out = set()
+        for pid in pids:
+            p = self.persons.get(pid)
+            if p is None:
+                continue
+            given = {norm(g) for g in p.given}
+            for h in p.ids.get("handle", ()):
+                if len(h) >= 5 and h not in given and re.search(
+                        rf"(?<![\w.-]){re.escape(h)}(?![\w@-]|\.\w)", text):
+                    out.add(pid)
+        return out
+
+    def _kind_cues(self, chunk: str) -> set[str]:
+        out = set()
+        if ROLE_CUE.search(chunk) or "@kipupay.co" in chunk.lower():
+            out.add("employee")
+        if CUSTOMER_KEY_RX.search(chunk):
+            out.add("customer")
+        for q in self.evidence(chunk):
+            kind = KIND_GROUP.get(self.persons[q].kind) if q in self.persons else None
+            if kind:
+                out.add(kind)
+        return out
+
+    def _kind_prior(self, pids: set[str], ctx: Ctx, text: str) -> str | None:
+        """"employee" or "customer": which kind an ambiguous mention most likely refers to.
+
+        An empleados row (or a record owned by an employee) is about colleagues. Otherwise the
+        lines where the shared name occurs decide (a role or the corporate mailbox on that line,
+        or a customer key or identifier), then the record as a whole; None when they disagree."""
+        if ctx.record_id.startswith("empleados:"):
+            return "employee"
+        owner = self.persons.get(self.resolve_pid(ctx.owner)) if ctx.owner else None
+        if owner is not None and owner.kind == "employee":
+            return "employee"
+        shared: set[tuple[str, ...]] | None = None
+        for pid in pids:
+            p = self.persons[pid]
+            forms = {ntoks(" ".join(p.given[:a] + p.surnames[:b]))
+                     for a in {1, len(p.given)} for b in {1, len(p.surnames)} if a and b and p.given and p.surnames}
+            shared = forms if shared is None else shared & forms
+        # The mention this call is about: its own line, and its column header in a table row.
+        line, header = self._tie_line(pids, ctx, text)
+        if header:
+            kinds = {k for k, rx in (("employee", EMPLOYEE_HEADER), ("customer", CUSTOMER_HEADER)) if rx.search(header)}
+            if len(kinds) == 1:
+                return kinds.pop()
+        if line:
+            cues = self._kind_cues(line)
+            if len(cues) == 1:
+                return cues.pop()
+        votes: set[str] = set()
+        for line in text.splitlines():
+            toks = ntoks(line)
+            if any(_has_run(toks, f) for f in shared or ()):
+                cues = self._kind_cues(line)
+                if len(cues) == 1:
+                    votes |= cues
+        if len(votes) == 1:
+            return votes.pop()
+        if votes:
+            return None
+        cues = self._kind_cues(ctx.record_text or text)
+        return cues.pop() if len(cues) == 1 else None
+
+    _MONTHS = {m: i + 1 for i, m in enumerate(("enero", "febrero", "marzo", "abril", "mayo", "junio", "julio",
+                                                "agosto", "septiembre", "octubre", "noviembre", "diciembre"))}
+    _AMOUNT_RX = re.compile(r"(?<![\d.,])\$?\s?(\d{1,3}(?:\.\d{3})+|\d{4,9})(?![\d.,])")
+    _DATE_RX = re.compile(r"(?i)(?<!\d)(?:(\d{4})-(\d{2})-(\d{2})|(\d{1,2}) de (" +
+                          "|".join(("enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto",
+                                    "septiembre", "octubre", "noviembre", "diciembre")) +
+                          r")(?: de (\d{4}))?|(\d{1,2})/(\d{1,2})(?:/(\d{4}))?)(?!\d)")
+
+    def tx_evidence(self, text: str, year: str = "2026") -> set[str]:
+        """Customers with a transaction whose date and amount the text mentions together."""
+        if not self.tx_index or not text:
+            return set()
+        amounts = {m.group(1).replace(".", "") for m in self._AMOUNT_RX.finditer(text)}
+        dates = set()
+        for m in self._DATE_RX.finditer(text):
+            if m.group(1):
+                dates.add(f"{m.group(1)}-{m.group(2)}-{m.group(3)}")
+            elif m.group(4):
+                dates.add(f"{m.group(6) or year}-{self._MONTHS[m.group(5).lower()]:02d}-{int(m.group(4)):02d}")
+            else:
+                dates.add(f"{m.group(9) or year}-{int(m.group(8)):02d}-{int(m.group(7)):02d}")
+        out: set[str] = set()
+        for d in dates:
+            for a in amounts:
+                out |= self.tx_index.get((d, a), set())
+        return {self.resolve_pid(p) for p in out}
+
+    def _tie_line(self, pids: set[str], ctx: Ctx, text: str) -> tuple[str, str]:
+        """(line, column header) of the mention a tie call is about. find_names asks left to
+        right, so the n-th call for these candidates in this text is their n-th shared mention
+        (counted on the record's context, so each record starts over)."""
+        seq = vars(ctx).setdefault("_tie_seq", {})
+        key = (hash(text), frozenset(pids))
+        if key not in seq:
+            seq[key] = [self._tie_offsets(pids, text), 0]
+        offsets, n = seq[key]
+        if not offsets:
+            return "", ""
+        seq[key][1] = n + 1
+        pos = offsets[n % len(offsets)]
+        start = text.rfind("\n", 0, pos) + 1
+        end = text.find("\n", pos)
+        line = text[start:len(text) if end < 0 else end]
+        header = ""
+        if line.lstrip().startswith("|"):
+            col = line[:pos - start].count("|")
+            above = text[:start].splitlines()
+            for j in range(len(above) - 1, 0, -1):
+                if TABLE_RULE_RX.fullmatch(above[j]):
+                    cells = above[j - 1].split("|")
+                    header = cells[col] if col < len(cells) else ""
+                    break
+                if not above[j].lstrip().startswith("|"):
+                    break
+        return line, header
+
+    def _tie_offsets(self, pids: set[str], text: str) -> list[int]:
+        """Offsets of the mentions find_names resolves to exactly these candidates (same greedy
+        longest match), in order."""
+        toks = [(m.start(), m.end(), m.group(), norm(m.group())) for m in TOKEN_RX.finditer(text)]
+        out, i = [], 0
+        while i < len(toks):
+            best = None
+            for ftoks, ng, ns, pid in self.name_index.get(toks[i][3], []):
+                n = len(ftoks)
+                if i + n > len(toks) or (best and n < best[0]):
+                    continue
+                if all(toks[i + k][3] == ftoks[k] for k in range(n)) and self._gaps_ok(text, toks, i, n):
+                    if best is None or n > best[0]:
+                        best = (n, ns, {self.resolve_pid(pid)})
+                    elif n == best[0]:
+                        best[2].add(self.resolve_pid(pid))
+            if best is None:
+                i += 1
+                continue
+            if best[1] > 0 and best[2] == pids:
+                out.append(toks[i][0])
+            i += best[0]
+        return out
 
     def evidence(self, text: str) -> set[str]:
         """Persons pointed to by hard identifiers in a piece of text."""
@@ -607,7 +801,8 @@ class Engine:
     def _is_kept_at(self, text, start, end) -> bool:
         window = norm(text[max(0, start - 25):min(len(text), end + 25)])
         surf = norm(text[start:end])
-        return any(k in window and surf in k for k in _KEPT_NORM if len(k) > len(surf))
+        # >= : a mention that IS a kept term ("Juan Valdez") is kept too, not only a part of one
+        return any(k in window and surf in k for k in _KEPT_NORM if len(k) >= len(surf))
 
     def _unknown_name(self, text, toks, i, ctx):
         s0, e0, raw0, n0 = toks[i]
@@ -623,6 +818,12 @@ class Engine:
             words.append(raw)
             j += 1
         if len(words) < 2 or all(is_given(w) for w in words):
+            return None
+        # A kept term opening the span ("<brand> <barrio>" in a purchase description) is not a
+        # person: registering the longer span would turn every later mention of the brand into one.
+        n = kept_lead(words)
+        if n:
+            self.kept_seen.setdefault(text[s0:toks[i + n - 1][1]], set()).add(ctx.record_id)
             return None
         start, end = s0, toks[j - 1][1]
         surf = text[start:end]
@@ -669,7 +870,7 @@ class Engine:
         result = "".join(out)
         self.collect_kept(text, ctx.record_id)
         owner = self.persons.get(self.resolve_pid(ctx.owner)) if ctx.owner else None
-        return self.generalize_quasi(result, owner.city if owner else "")
+        return self.generalize_quasi(result, owner.city if owner else "", owner)
 
     def collect_kept(self, text: str, rec_id: str) -> None:
         nt = norm(text)
@@ -678,33 +879,63 @@ class Engine:
             if len(k) >= 4 and re.search(rf"(?<![a-z0-9]){re.escape(k)}(?![a-z0-9])", nt):
                 self.kept_seen.setdefault(term, set()).add(rec_id)
 
-    def generalize_quasi(self, text: str, city: str = "") -> str:
-        """Occupation + barrio + year in a self-description: generalize all three.
+    _barrio_cache: tuple = ((), None)
+
+    def _barrio_rx(self):
+        keys = tuple(sorted((b for b in fakes.CITY_OF_BARRIO if len(b) >= 4), key=len, reverse=True))
+        if self._barrio_cache[0] != keys:
+            alt = "|".join(r"\s+".join(re.escape(w) for w in b.split()) for b in keys)
+            self._barrio_cache = (keys, re.compile(rf"(?<![\w])(?:{alt})(?![\w])", re.I) if keys else None)
+        return self._barrio_cache[1]
+
+    def generalize_quasi(self, text: str, city: str = "", person: "Person | None" = None) -> str:
+        """Generalize occupation, barrio and joining year together when they could single
+        someone out, whatever the phrasing (first or third person, Spanish or English): an
+        occupation stated after a cue ("soy ..."), one that matches the linked customer's own
+        master row, or at least two of the three in the same text. Without a linked customer
+        (most documents) it takes an occupation and a barrio together. A place alone stays.
 
         city is the record owner's city, used for barrios that exist in several cities
         (Castilla: Medellín and Bogotá; Boston: Medellín and Barranquilla)."""
-        # One precompiled alternation (longest term first) instead of one regex per term:
-        # the per-term loop recompiled ~1,000 patterns per text (the re cache holds 512).
-        # Spans are found on the original text and replaced right-to-left, so a sector
-        # phrase already written ("estudiante de educación superior") is never re-matched.
-        spans = [m for m in fakes.OCCUPATION_RX.finditer(text)
-                 if OCC_CUE.search(text[max(0, m.start() - 40):m.start()])]
-        if not spans:
+        if not text:
             return text
-        out = text
-        for m in reversed(spans):
-            out = out[:m.start()] + fakes.occupation_sector(m.group()) + out[m.end():]
+        mine_occ = norm(person.occupation) if person and person.occupation else ""
+        mine_barrio = " ".join(norm(person.barrio).split()) if person and person.barrio else ""
+        occs, cued = [], False
+        for m in fakes.OCCUPATION_RX.finditer(text):
+            term = norm(m.group())
+            cue = bool(OCC_CUE.search(text[max(0, m.start() - 40):m.start()]))
+            if cue or term == mine_occ or term not in fakes.AMBIGUOUS_OCCUPATION_TERMS:
+                occs.append(m)
+                cued = cued or cue
+        rx = self._barrio_rx()
+        plain = strip_accents(text)
+        barrios = [m for m in rx.finditer(plain) if text[m.start():m.start() + 1].isupper()] if rx else []
+        years = list(YEAR_CTX_RX.finditer(text))
+        mine = any(norm(m.group()) == mine_occ for m in occs) or \
+            any(" ".join(norm(m.group()).split()) == mine_barrio for m in barrios)
+        together = (bool(occs) + bool(barrios) + bool(years)) >= 2 if person else (bool(occs) and bool(barrios))
+        if not (cued or mine or together):
+            return text
         home = fakes.canonical_city(city) if city else ""
-        for barrio_norm, barrio_city in list(fakes.CITY_OF_BARRIO.items()):
-            if len(barrio_norm) < 4:
-                continue
-            for m in re.finditer(r"[^\W\d_]+(?:\s+[^\W\d_]+){0,3}", out):
-                pass
-            rx = re.compile(r"(?<![\w])" + r"\s+".join(re.escape(w) for w in barrio_norm.split()) + r"(?![\w])", re.I)
-            plain = strip_accents(out)
-            m = rx.search(plain)
-            if m and out[m.start():m.end()][:1].isupper():
-                cities = fakes.CITIES_OF_BARRIO.get(barrio_norm, [barrio_city])
-                out = out[:m.start()] + (home if home in cities else barrio_city) + out[m.end():]
-        out = YEAR_RX.sub("hace unos años", out, count=1) if re.search(r"(?i)\b(?:en|desde|año)\s+(?:19|20)\d{2}\b", out) else out
+        edits = [(m.start(), m.end(), fakes.occupation_sector(m.group())) for m in occs]
+        for m in barrios:
+            key = " ".join(norm(m.group()).split())
+            cities = fakes.CITIES_OF_BARRIO.get(key) or [fakes.CITY_OF_BARRIO.get(key, "")]
+            target = home if home in cities else cities[0]
+            if target:
+                edits.append((m.start(), m.end(), target))
+        if years:
+            y = years[0]
+            if y.group(1).lower() == "since":
+                edits.append((y.start(), y.end(), "for a few years"))
+            elif y.group(1).lower() == "in":
+                edits.append((y.start(), y.end(), "a few years ago"))
+            else:  # "entré en 2025" -> "entré en hace unos años", as in the reference output
+                edits.append((y.start(2), y.end(2), "hace unos años"))
+        out, last = text, len(text) + 1
+        for s0, e0, repl in sorted(edits, key=lambda x: x[0], reverse=True):
+            if e0 <= last:  # skip overlapping spans
+                out = out[:s0] + repl + out[e0:]
+                last = s0
         return out
