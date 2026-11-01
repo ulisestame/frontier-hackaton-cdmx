@@ -105,6 +105,14 @@ ADDR_KEY_RX = re.compile(
 )
 _ADDR_TYPE = {"calle": "cl", "carrera": "kr", "cra": "kr", "cr": "kr", "kra": "kr", "diagonal": "dg",
               "transversal": "tv", "trans": "tv", "avenida": "av", "circular": "cq"}
+_MONTH_NAMES = ("enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto", "septiembre", "octubre",
+                "noviembre", "diciembre")
+_MONTH_ABBR = {m[:3]: i + 1 for i, m in enumerate(_MONTH_NAMES)} | {"set": 9, "sept": 9}
+LONG_DATE_RX = re.compile(  # "7 de abril de 1991", "7 abril 1991", "7 abr. 1991": checked against birth dates only
+    r"(?i)(?<!\d)(\d{1,2})(\s+(?:de\s+)?)(enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|setiembre|"
+    r"octubre|noviembre|diciembre|sept|ene|feb|mar|abr|may|jun|jul|ago|sep|set|oct|nov|dic)(?![a-záéíóúñ])(\.?)"
+    r"(\s+(?:del?\s+)?)((?:19|20)\d{2})(?!\d)"
+)
 LAST4_RX = re.compile(r"(?<![\d.,/-])(\d{4})(?![\d/-]|[.,]\d)")
 TABLE_KEY_RX = re.compile(r"\b(CL-\d{4,6}|PG-\d{4,6}|TX-\d{4,7}|PQR-\d{4}-\d{3,5}|KP-\d{3})\b")
 # Ties between people of different kinds (a customer and an employee who share a short name):
@@ -834,6 +842,23 @@ class Engine:
             # same factory key as pseudo() -> same shifted date, written in the original layout
             out = self.f.birth(f"{p.pid}:{canon('birth', iso)}", m.group(), dayfirst=dayfirst)
             add(m.start(), m.end(), out, "birth", p, m.group(), "birth_iso", val)
+        # Long Spanish dates, when the date is someone's registered birth date: the person's pseudo
+        # birth date written in the same form (day padding, "de", full or abbreviated month, case).
+        for m in LONG_DATE_RX.finditer(text):
+            day, sep1, mon, dot, sep2, year = m.groups()
+            month = _MONTH_NUM.get(mon.lower()) or _MONTH_ABBR.get(mon.lower())
+            iso = f"{year}-{month:02d}-{int(day):02d}" if month else ""
+            if not iso or not _valid_iso(iso) or not self.id_index.get(("birth", iso)):
+                continue
+            p = self.person(self.pick(self.id_index[("birth", iso)], ctx, text))
+            val = self.pseudo("birth", p, iso)
+            nd = _dt.date.fromisoformat(val)
+            name = _MONTH_NAMES[nd.month - 1]
+            if len(mon) <= 4 and mon.lower() not in _MONTH_NUM:
+                name = name[:len(mon)] if len(mon) <= 3 else name[:3]
+            name = name.upper() if mon.isupper() else name.capitalize() if mon[:1].isupper() else name
+            nday = f"{nd.day:02d}" if len(day) == 2 else str(nd.day)
+            add(m.start(), m.end(), f"{nday}{sep1}{name}{dot}{sep2}{nd.year}", "birth", p, m.group(), "birth_iso", val)
         # handles (chat usernames, pqrs agents)
         for m in re.finditer(r"(?<![\w.-])[a-z][a-z0-9]*(?:[._][a-z0-9]+)*(?![\w@-]|\.\w)", text):
             pids = self.id_index.get(("handle", m.group().lower()), set())
