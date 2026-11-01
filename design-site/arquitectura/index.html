@@ -30,7 +30,7 @@
 <figure class="diagram">
 <p class="hint">Desliza horizontalmente para ver el diagrama completo.</p>
 <div class="scroll">
-<svg id="diagrama" class="dg" viewBox="0 0 1200 912" fill="#12161D" role="img" aria-labelledby="dg-title dg-desc" xmlns="http://www.w3.org/2000/svg">
+<svg id="diagrama" class="dg" viewBox="0 0 1200 998" fill="#12161D" role="img" aria-labelledby="dg-title dg-desc" xmlns="http://www.w3.org/2000/svg">
 <title id="dg-title">Arquitectura del servicio de anonimización del corpus de Kipu Pay, tal como está construido</title>
 <desc id="dg-desc">El evaluador llama a la API HTTP /v1. POST /run crea un job; el JobManager lanza el proceso cli run, lo relanza hasta 2 veces y lo corta a los 115 minutos. El proceso descarga las fuentes a raw/, normaliza, arma el registro de personas, detecta con reglas (la rama de IA es el siguiente paso), vincula menciones, asigna seudónimos con HMAC y state.json, generaliza cuasi-identificadores, reemplaza fragmentos, se autoverifica y publica de forma atómica en output/ con el puntero CURRENT. /anonymize en vivo lee state.json. Un vigía local compara record_index.</desc>
 <!--
@@ -59,7 +59,7 @@
 <marker id="ah-acc" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="10" markerHeight="10" markerUnits="userSpaceOnUse" orient="auto-start-reverse"><path d="M0,0L10,5L0,10z" fill="#1F3FBF"/></marker>
 <marker id="ah-store" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="9" markerHeight="9" markerUnits="userSpaceOnUse" orient="auto-start-reverse"><path d="M0,0L10,5L0,10z" fill="#3B5B8C"/></marker>
 </defs>
-<rect id="fondo" x="0" y="0" width="1200" height="912" fill="#FFFFFF"/>
+<rect id="fondo" x="0" y="0" width="1200" height="998" fill="#FFFFFF"/>
 
 <!-- ===================== ACTORES EXTERNOS ===================== -->
 <g id="actor-evaluador" transform="translate(14 46)">
@@ -107,7 +107,7 @@
 
 <!-- ===================== SERVICIO (contenedor siempre encendido) ===================== -->
 <g id="servicio">
-  <rect class="caja-servicio" x="190" y="12" width="998" height="886" rx="14" fill="#FFFFFF" stroke="#5A6371" stroke-width="1.5"/>
+  <rect class="caja-servicio" x="190" y="12" width="998" height="972" rx="14" fill="#FFFFFF" stroke="#5A6371" stroke-width="1.5"/>
   <text x="206" y="34" class="t">Servicio · un contenedor siempre encendido (Railway)</text>
   <text x="1172" y="34" text-anchor="end" class="s" fill="#5A6371">run.sh relanza uvicorn · Railway: healthcheck y reinicio</text>
 </g>
@@ -147,13 +147,13 @@
 
 <!-- ===================== PROCESO cli run (pipeline) ===================== -->
 <g id="cli-run" transform="translate(222 262)">
-  <rect class="caja-job" width="898" height="460" rx="10" fill="#F6F7F9" stroke="#5A6371" stroke-dasharray="5 4"/>
+  <rect class="caja-job" width="898" height="546" rx="10" fill="#F6F7F9" stroke="#5A6371" stroke-dasharray="5 4"/>
   <text x="14" y="22" class="t">cli run · proceso separado</text>
   <text x="884" y="22" text-anchor="end" class="s" fill="#5A6371">python -m anon.cli run · estado → jobs/&lt;job&gt;.json</text>
 </g>
 
 <g id="etapa-1-ingesta" transform="translate(236 310)">
-  <rect class="caja-codigo" width="160" height="104" rx="8" fill="#FFFFFF" stroke="#0E7C66" stroke-width="1.5"/>
+  <rect class="caja-codigo" width="160" height="154" rx="8" fill="#FFFFFF" stroke="#0E7C66" stroke-width="1.5"/>
   <text x="12" y="22" class="t13"><tspan fill="#0E7C66">1</tspan> · Ingesta</text>
   <text x="12" y="42" class="d">escribe raw/&lt;ts&gt;/</text>
   <text x="12" y="58" class="d">500/min, reintentos</text>
@@ -161,7 +161,7 @@
   <text x="12" y="90" class="d">descarga otra vez</text>
 </g>
 <g id="etapa-2-normalizacion" transform="translate(412 310)">
-  <rect class="caja-codigo" width="150" height="104" rx="8" fill="#FFFFFF" stroke="#0E7C66" stroke-width="1.5"/>
+  <rect class="caja-codigo" width="150" height="154" rx="8" fill="#FFFFFF" stroke="#0E7C66" stroke-width="1.5"/>
   <text x="12" y="22" class="t13"><tspan fill="#0E7C66">2</tspan> · Normalización</text>
   <text x="12" y="42" class="d">lee raw/&lt;ts&gt;/</text>
   <text x="12" y="58" class="d">registro por id;</text>
@@ -169,7 +169,7 @@
   <text x="12" y="90" class="d">record_index</text>
 </g>
 <g id="etapa-3-registro" transform="translate(578 310)">
-  <rect class="caja-codigo" width="150" height="104" rx="8" fill="#FFFFFF" stroke="#0E7C66" stroke-width="1.5"/>
+  <rect class="caja-codigo" width="150" height="154" rx="8" fill="#FFFFFF" stroke="#0E7C66" stroke-width="1.5"/>
   <text x="12" y="22" class="t13"><tspan fill="#0E7C66">3</tspan> · Registro</text>
   <text x="12" y="42" class="d">anclado en cl:/kp:;</text>
   <text x="12" y="58" class="d">identificador duro;</text>
@@ -177,15 +177,18 @@
   <text x="12" y="90" class="d">si es único</text>
 </g>
 <g id="etapa-4a-reglas" transform="translate(744 310)">
-  <rect class="caja-codigo" width="200" height="104" rx="8" fill="#E8F4F1" stroke="#0E7C66" stroke-width="2"/>
+  <rect class="caja-codigo" width="200" height="154" rx="8" fill="#E8F4F1" stroke="#0E7C66" stroke-width="2"/>
   <text x="12" y="22" class="t13" fill="#0E7C66">4a · Detección por reglas</text>
   <text x="12" y="42" class="d">cédula, teléfono, correo,</text>
-  <text x="12" y="58" class="d">placa, pasaporte,</text>
-  <text x="12" y="74" class="d">@usuario</text>
-  <text x="12" y="90" class="d">+ nombres del registro</text>
+  <text x="12" y="58" class="d">placa, pasaporte, @usuario,</text>
+  <text x="12" y="74" class="d">cuentas y tarjetas, pólizas,</text>
+  <text x="12" y="90" class="d">IPv4, inicial + apellido,</text>
+  <text x="12" y="106" class="d">fechas de nacimiento en</text>
+  <text x="12" y="122" class="d">palabras</text>
+  <text x="12" y="138" class="d">+ nombres del registro</text>
 </g>
 <g id="etapa-4b-ia" transform="translate(960 310)">
-  <rect class="caja-ia" width="146" height="104" rx="8" fill="#FDF0E8" stroke="#C2410C" stroke-width="2" stroke-dasharray="7 4"/>
+  <rect class="caja-ia" width="146" height="154" rx="8" fill="#FDF0E8" stroke="#C2410C" stroke-width="2" stroke-dasharray="7 4"/>
   <text x="12" y="22" class="t13" fill="#C2410C">4b · IA</text>
   <text x="12" y="40" class="s" fill="#C2410C">SIGUIENTE PASO</text>
   <text x="12" y="58" class="d">solo el residuo</text>
@@ -193,7 +196,7 @@
   <text x="12" y="90" class="d">y fail-closed</text>
 </g>
 
-<g id="etapa-5-vinculacion" transform="translate(236 452)">
+<g id="etapa-5-vinculacion" transform="translate(236 502)">
   <rect class="caja-codigo" width="240" height="132" rx="8" fill="#FFFFFF" stroke="#0E7C66" stroke-width="1.5"/>
   <text x="12" y="22" class="t13"><tspan fill="#0E7C66">5</tspan> · Vinculación</text>
   <text x="12" y="42" class="d">elige: autor → dueño → hilo</text>
@@ -203,7 +206,7 @@
   <text x="12" y="106" class="d">entre tipos: el contexto;</text>
   <text x="12" y="122" class="d">fecha + monto desempatan</text>
 </g>
-<g id="etapa-6-seudonimos" transform="translate(492 452)">
+<g id="etapa-6-seudonimos" transform="translate(492 502)">
   <rect class="caja-codigo" width="190" height="132" rx="8" fill="#FFFFFF" stroke="#0E7C66" stroke-width="1.5"/>
   <text x="12" y="22" class="t13"><tspan fill="#0E7C66">6</tspan> · Seudónimos</text>
   <text x="12" y="42" class="d">flujo HMAC por persona;</text>
@@ -211,7 +214,7 @@
   <text x="12" y="74" class="d">gana el valor ya</text>
   <text x="12" y="90" class="d">publicado</text>
 </g>
-<g id="etapa-7-cuasi-id" transform="translate(698 452)">
+<g id="etapa-7-cuasi-id" transform="translate(698 502)">
   <rect class="caja-codigo" width="220" height="132" rx="8" fill="#FFFFFF" stroke="#0E7C66" stroke-width="1.5"/>
   <text x="12" y="22" class="t13"><tspan fill="#0E7C66">7</tspan> · Cuasi-id</text>
   <text x="12" y="42" class="d">siempre, en tabla y texto:</text>
@@ -221,7 +224,7 @@
   <text x="12" y="106" class="d">también contra la fila</text>
   <text x="12" y="122" class="d">maestra del cliente</text>
 </g>
-<g id="etapa-8-reemplazo" transform="translate(934 452)">
+<g id="etapa-8-reemplazo" transform="translate(934 502)">
   <rect class="caja-codigo" width="172" height="132" rx="8" fill="#FFFFFF" stroke="#0E7C66" stroke-width="1.5"/>
   <text x="12" y="22" class="t13"><tspan fill="#0E7C66">8</tspan> · Reemplazo</text>
   <text x="12" y="42" class="d">solo los fragmentos;</text>
@@ -229,16 +232,18 @@
   <text x="12" y="74" class="d">reescribe</text>
 </g>
 
-<g id="etapa-9-autoverificacion" transform="translate(856 616)">
-  <rect class="caja-control" width="250" height="100" rx="8" fill="#FCEDEC" stroke="#B42318" stroke-width="2"/>
+<g id="etapa-9-autoverificacion" transform="translate(856 666)">
+  <rect class="caja-control" width="250" height="136" rx="8" fill="#FCEDEC" stroke="#B42318" stroke-width="2"/>
   <text x="12" y="22" class="t13" fill="#B42318">9 · Autoverificación</text>
   <text x="12" y="42" class="d">criterio del validador sobre</text>
-  <text x="12" y="58" class="d">toda la salida; fugas y avisos</text>
-  <text x="12" y="74" class="d">→ report.json; el original que</text>
-  <text x="12" y="90" class="d">escapa no va en entities.json</text>
+  <text x="12" y="58" class="d">toda la salida; repara lo que</text>
+  <text x="12" y="74" class="d">encuentra: lo reemplaza por el</text>
+  <text x="12" y="90" class="d">seudónimo y vuelve a verificar</text>
+  <text x="12" y="106" class="d">(máx. 2 pasadas); lo que queda</text>
+  <text x="12" y="122" class="d">va a report.json y no se declara</text>
 </g>
-<g id="publicacion" transform="translate(556 616)">
-  <rect class="caja-salida" width="280" height="100" rx="8" fill="#FFFFFF" stroke="#12161D" stroke-width="2"/>
+<g id="publicacion" transform="translate(556 666)">
+  <rect class="caja-salida" width="280" height="136" rx="8" fill="#FFFFFF" stroke="#12161D" stroke-width="2"/>
   <text x="12" y="22" class="t13">Publicación atómica</text>
   <text x="12" y="42" class="d">escribe en output/&lt;job&gt;.&lt;n&gt;.tmp,</text>
   <text x="12" y="58" class="d">renombra y mueve CURRENT;</text>
@@ -247,7 +252,7 @@
 </g>
 
 <!-- ===================== VOLUMEN /data ===================== -->
-<g id="volumen-data" transform="translate(222 744)">
+<g id="volumen-data" transform="translate(222 830)">
   <rect class="caja-almacen" width="898" height="140" rx="10" fill="#EBF0F7" stroke="#3B5B8C" stroke-width="1.5"/>
   <text x="14" y="22" class="t" fill="#3B5B8C">Volumen /data · disco persistente</text>
   <text x="884" y="22" text-anchor="end" class="s" fill="#3B5B8C">escrituras atómicas: temporal + os.replace</text>
@@ -289,26 +294,26 @@
   <path id="f-2-3" d="M562 362H574" stroke="#12161D" stroke-width="1.6" marker-end="url(#ah)"/>
   <path id="f-3-4a" d="M728 362H740" stroke="#12161D" stroke-width="1.6" marker-end="url(#ah)"/>
   <path id="f-4a-4b" d="M944 362H956" stroke="#C2410C" stroke-width="1.6" stroke-dasharray="3 2" marker-end="url(#ah-ai)"/>
-  <path id="f-4a-5" d="M844 414V433H356V448" stroke="#12161D" stroke-width="1.6" marker-end="url(#ah)"/>
-  <path id="f-5-6" d="M476 518H488" stroke="#12161D" stroke-width="1.6" marker-end="url(#ah)"/>
-  <path id="f-6-7" d="M682 518H694" stroke="#12161D" stroke-width="1.6" marker-end="url(#ah)"/>
-  <path id="f-7-8" d="M918 518H930" stroke="#12161D" stroke-width="1.6" marker-end="url(#ah)"/>
-  <path id="f-8-9" d="M1020 584V612" stroke="#12161D" stroke-width="1.6" marker-end="url(#ah)"/>
-  <path id="f-9-publicacion" d="M856 666H840" stroke="#12161D" stroke-width="1.6" marker-end="url(#ah)"/>
-  <path id="f-publicacion-output" d="M760 716V772" stroke="#0E7C66" stroke-width="2" marker-end="url(#ah-code)"/>
-  <path id="f-lecturas-http" d="M1120 812H1152V126" stroke="#1F3FBF" stroke-width="1.6" marker-end="url(#ah-acc)"/>
+  <path id="f-4a-5" d="M844 464V483H356V498" stroke="#12161D" stroke-width="1.6" marker-end="url(#ah)"/>
+  <path id="f-5-6" d="M476 568H488" stroke="#12161D" stroke-width="1.6" marker-end="url(#ah)"/>
+  <path id="f-6-7" d="M682 568H694" stroke="#12161D" stroke-width="1.6" marker-end="url(#ah)"/>
+  <path id="f-7-8" d="M918 568H930" stroke="#12161D" stroke-width="1.6" marker-end="url(#ah)"/>
+  <path id="f-8-9" d="M1020 634V662" stroke="#12161D" stroke-width="1.6" marker-end="url(#ah)"/>
+  <path id="f-9-publicacion" d="M856 734H840" stroke="#12161D" stroke-width="1.6" marker-end="url(#ah)"/>
+  <path id="f-publicacion-output" d="M760 802V858" stroke="#0E7C66" stroke-width="2" marker-end="url(#ah-code)"/>
+  <path id="f-lecturas-http" d="M1120 898H1152V126" stroke="#1F3FBF" stroke-width="1.6" marker-end="url(#ah-acc)"/>
 </g>
 
 <!-- Ruta en vivo: /anonymize lee state.json (caché por mtime) -->
-<path id="ruta-en-vivo" d="M212 240V734H480V772" fill="none" stroke="#1F3FBF" stroke-width="2" stroke-dasharray="7 5" marker-end="url(#ah-acc)"/>
+<path id="ruta-en-vivo" d="M212 240V819H480V858" fill="none" stroke="#1F3FBF" stroke-width="2" stroke-dasharray="7 5" marker-end="url(#ah-acc)"/>
 
 <!-- Seudónimos ⇄ state.json: lee el anterior, escribe atómico, copia en history/ -->
 <g id="conectores-data">
-  <path d="M520 584V772" fill="none" stroke="#3B5B8C" stroke-width="1.6" stroke-dasharray="4 4" marker-start="url(#ah-store)" marker-end="url(#ah-store)"/>
+  <path d="M520 634V858" fill="none" stroke="#3B5B8C" stroke-width="1.6" stroke-dasharray="4 4" marker-start="url(#ah-store)" marker-end="url(#ah-store)"/>
   <g class="s" fill="#3B5B8C">
-    <text x="510" y="640" text-anchor="end">lee el anterior,</text>
-    <text x="510" y="655" text-anchor="end">escribe atómico y</text>
-    <text x="510" y="670" text-anchor="end">copia a history/</text>
+    <text x="510" y="700" text-anchor="end">lee el anterior,</text>
+    <text x="510" y="715" text-anchor="end">escribe atómico y</text>
+    <text x="510" y="730" text-anchor="end">copia a history/</text>
   </g>
 </g>
 
