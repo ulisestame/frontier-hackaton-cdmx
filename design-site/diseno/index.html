@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Doc de diseño · Kipu Pay · Corpus anonimizado</title>
-<meta name="description" content="Doc de diseño del servicio que entrega el corpus de soporte de Kipu Pay listo para entrenar modelos, sin nadie identificable.">
+<meta name="description" content="Doc de diseño del servicio que entrega el corpus de soporte de Kipu Pay listo para entrenar modelos, con cada persona reemplazada por un seudónimo consistente.">
 <meta name="theme-color" content="#0C1B25">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -26,18 +26,18 @@
 </header>
 
 <section class="thesis" aria-label="Tesis">
-  <p class="claim"><span class="c-code">Código para el volumen</span>, <span class="c-ia">IA solo donde hace falta</span>, y lo aprendido se guarda como <span class="c-store">datos (reglas)</span>, no como código.</p>
+  <p class="claim"><span class="c-code">Código para el volumen</span>, <span class="c-ia">IA solo donde hace falta</span>. Hoy todo el volumen pasa por reglas escritas en el código; guardar lo aprendido como <span class="c-store">datos</span> es el siguiente paso.</p>
   <h2 class="h3">Problema</h2>
   <p class="lede">En LATAM los datos de los ciudadanos no se pueden vender tal cual para entrenar modelos. Transformamos el corpus de Kipu Pay para que siga siendo útil para entrenar atención al cliente sin exponer a nadie.</p>
 
   <ol class="track flow" aria-label="Flujo: entrada, pipeline, bifurcación, salida">
-    <li class="st"><span class="st-k"><span class="sg del" aria-hidden="true">−</span>Entrada</span><b>Corpus crudo</b><small>2.028 mensajes · 26 documentos · 6.243 filas</small></li>
+    <li class="st"><span class="st-k"><span class="sg del" aria-hidden="true">−</span>Entrada</span><b>Corpus crudo</b><small>8.297 registros antes del crecimiento · 10.856 después</small></li>
     <li class="st"><span class="st-k">Pipeline</span><b class="mk code">Procesado con código</b><small>ingesta, normalización, registro de personas</small></li>
     <li class="st st-wide"><span class="st-k">Bifurcación</span>
-      <div class="lane code"><b>Rama de código</b><small>v1: todo el volumen con reglas, validadores y registro de personas</small></div>
-      <div class="lane ai"><b>Rama de IA</b><small>siguiente paso: solo el residuo ambiguo, con caché y respaldo fail-closed</small></div>
+      <div class="lane code"><b>Rama de código</b><small>hoy procesa todo el volumen: reglas, validadores y registro de personas</small></div>
+      <div class="lane ai"><b>Rama de IA</b><small>siguiente paso: solo el residuo ambiguo, con caché y fail-closed</small></div>
     </li>
-    <li class="st"><span class="st-k"><span class="sg add" aria-hidden="true">+</span>Salida</span><b>Corpus listo para entrenar</b><small>3 JSONL + entities.json para el jurado · API /v1</small></li>
+    <li class="st"><span class="st-k"><span class="sg add" aria-hidden="true">+</span>Salida</span><b>Corpus listo para entrenar</b><small>3 JSONL + entities.json (solo para el jurado) · API /v1</small></li>
   </ol>
 
   <figure class="diff">
@@ -54,10 +54,10 @@
       <ins class="ln ln-add"><span class="no" aria-hidden="true"></span><span class="no" aria-hidden="true">2</span><span class="sg" aria-hidden="true">+</span><span class="tx"><span class="sr-only">Seudonimizado: </span><mark>DANIELA RESTREPO</mark></span></ins>
 
       <div class="ln-hunk"><span aria-hidden="true">@@ </span>Forma: Correo deletreado<span aria-hidden="true"> @@</span></div>
-      <del class="ln ln-del"><span class="no" aria-hidden="true">3</span><span class="no" aria-hidden="true"></span><span class="sg" aria-hidden="true">-</span><span class="tx"><span class="sr-only">Original: </span><span class="pii">manuela punto castano</span> arroba gmail punto com</span></del>
-      <ins class="ln ln-add"><span class="no" aria-hidden="true"></span><span class="no" aria-hidden="true">3</span><span class="sg" aria-hidden="true">+</span><span class="tx"><span class="sr-only">Seudonimizado: </span><mark>daniela punto restrepo</mark> arroba gmail punto com</span></ins>
+      <del class="ln ln-del"><span class="no" aria-hidden="true">3</span><span class="no" aria-hidden="true"></span><span class="sg" aria-hidden="true">-</span><span class="tx"><span class="sr-only">Original: </span><span class="pii">manuela punto castano arroba gmail punto com</span></span></del>
+      <ins class="ln ln-add"><span class="no" aria-hidden="true"></span><span class="no" aria-hidden="true">3</span><span class="sg" aria-hidden="true">+</span><span class="tx"><span class="sr-only">Seudonimizado: </span><mark>daniela punto restrepo arroba outlook punto com</mark></span></ins>
     </div>
-    <figcaption class="note">Ilustrativo: frase del ejemplo del enunciado (la muestra, no el corpus) con seudónimos de ejemplo. Se reemplaza, no se reescribe; la misma persona lleva el mismo seudónimo en cada forma.</figcaption>
+    <figcaption class="note">Ilustrativo: la frase 1 viene del ejemplo del enunciado (la muestra, no el corpus); las formas 2 y 3 y los seudónimos son de ejemplo. Se reemplaza, no se reescribe; la misma persona lleva el mismo seudónimo en cada forma, y un correo personal pasa a un proveedor común.</figcaption>
   </figure>
 </section>
 
@@ -65,34 +65,35 @@
 <div class="sec-head"><h2><span class="n">1</span> Entendimiento del problema</h2><a class="path" href="#problema">/diseno/#problema</a></div>
 <div class="tbl stack-sm"><table class="kv">
   <tbody>
-    <tr><th>Entrada</th><td>API de fuentes (token del equipo, 600 peticiones/min, ETag): 2.028 mensajes en 320 hilos y 6 canales; 26 documentos (PDF, HTML y Markdown; 2 en inglés); 6.243 filas en 4 tablas CSV y XML. 8.297 ids en <code>record_index</code>.</td></tr>
-    <tr><th>Salida</th><td>Exactamente 4 archivos. <code>chats.jsonl</code>, <code>docs.jsonl</code>, <code>tables.jsonl</code>: JSONL, un registro por línea, mismos ids 1:1 y estructura original (ninguna clave desaparece; el cuerpo del documento es markdown con front matter y comentarios HTML). <code>entities.json</code>: diccionario con las formas reales, solo para el jurado; nunca viaja con el dataset.</td></tr>
+    <tr><th>Entrada</th><td>API de fuentes (token del equipo, 600 peticiones/min, ETag): chats estilo Slack, documentos PDF, HTML y Markdown (2 en inglés) y 4 tablas CSV y XML. 8.297 registros antes del crecimiento; 10.856 después.</td></tr>
+    <tr><th>Salida</th><td>Exactamente 4 archivos. <code>chats.jsonl</code>, <code>docs.jsonl</code>, <code>tables.jsonl</code>: un registro por línea, mismos ids 1:1 y estructura original (ninguna clave desaparece). <code>entities.json</code>: diccionario con las formas reales, solo para el jurado; nunca viaja con el dataset.</td></tr>
     <tr><th>Contrato</th><td>Nuestro servicio: sin autenticación, raíz <code>/v1</code>, UTF-8. Regeneración completa &lt; 2 h; <code>POST /anonymize</code> hasta 50 registros en &lt; 60 s.</td></tr>
-    <tr><th>Juez</th><td>Fuga 45 · utilidad 35 · consistencia 20. 5 tests públicos + 150 ocultos (200 tras el crecimiento); 3 corridas que miden el 60, 75 y 100 % de los ocultos.</td></tr>
+    <tr><th>Juez</th><td>Fuga 45 · utilidad 35 · consistencia 20. 3 corridas; la última antes del crecimiento vale 30 % y la última después, 70 %.</td></tr>
   </tbody>
 </table></div>
 
 <div class="split">
-  <div class="half repl"><div class="k"><span class="sg" aria-hidden="true">−</span>Se reemplaza</div><p>Toda persona natural (clientes, agentes y empleados de Kipu Pay, terceros nombrados en el texto) y sus identificadores: nombre, correo, celular, cédula, dirección, fecha de nacimiento, placa, pasaporte, cuenta, @usuario.</p></div>
-  <div class="half keep"><div class="k"><span class="sg" aria-hidden="true">=</span>Se conserva</div><p>Organizaciones, marcas, lugares y figuras públicas (Bancolombia, Carulla, Plaza Botero, Shakira), llaves de negocio (CL-…, TX-…), fechas de negocio y montos. El seudónimo mantiene la categoría: nombre del mismo género, correo, celular y cédula con formato válido, lejos del original.</p></div>
+  <div class="half repl"><div class="k"><span class="sg" aria-hidden="true">−</span>Se reemplaza</div><p>Toda persona natural (clientes, empleados, autores de chat, terceros nombrados) y sus datos: nombre, correo (también deletreado), cédula, celular, dirección, fecha de nacimiento, placa, pasaporte, cuenta bancaria, tarjeta, póliza, dirección IP y @usuario, en tablas, texto, metadatos y nombres de archivo; en texto libre, la fecha de nacimiento y el @usuario se reemplazan cuando ya están en el registro.</p></div>
+  <div class="half keep"><div class="k"><span class="sg" aria-hidden="true">=</span>Se conserva</div><p>Organizaciones, marcas, lugares y figuras públicas; montos, fechas de transacciones y PQR, estados y canales; llaves entre tablas (CL-, TX-, PQR-, KP-, PG-, radicados); el dominio corporativo de los correos y los buzones de rol.</p></div>
 </div>
 
 <h3>Caso difícil → cómo lo resolvemos</h3>
 <div class="tbl stack-sm"><table class="w-md">
-  <thead><tr><th>Caso</th><th>Cómo lo resolvemos</th><th>Rama</th></tr></thead>
+  <thead><tr><th>Caso</th><th>Cómo lo resolvemos</th></tr></thead>
   <tbody>
-    <tr><th>Nombres en MAYÚSCULAS sin tildes en extractos</th><td>Comparamos sobre texto normalizado (sin tildes, mayúsculas ni separadores); el seudónimo se escribe en el mismo estilo.</td><td class="nw"><span class="tag code">código</span></td></tr>
-    <tr><th>Correos deletreados con "arroba" y "punto"</th><td>Regex tolerante reconstruye el correo y lo cruza con el registro; el reemplazo se vuelve a deletrear.</td><td class="nw"><span class="tag code">código</span></td></tr>
-    <tr><th>Placas y pasaportes</th><td>Patrones con y sin guion o espacio, más palabra clave cercana; reemplazo con formato válido.</td><td class="nw"><span class="tag code">código</span></td></tr>
-    <tr><th>Nombres escondidos: archivo, metadatos PDF, comentarios HTML, <code>display:none</code>, <code>mailto</code>, slugs de URL, @handles del front matter</th><td>Se escanea todo campo con texto; se reemplaza el valor y la clave se conserva (<code>author</code> sale seudonimizado, no vacío).</td><td class="nw"><span class="tag code">código</span></td></tr>
-    <tr><th>Menciones de Slack</th><td>Se resuelven con el perfil del usuario → seudónimo de esa persona.</td><td class="nw"><span class="tag code">código</span></td></tr>
-    <tr><th>Dos clientas con el mismo nombre completo</th><td>Cada una conserva su llave (CL-…); el desempate vive en otra fuente (radicado, fecha + monto, adjunto, fila del maestro), nunca en la ciudad o el cargo → dos seudónimos.</td><td class="nw"><span class="tag code">código</span></td></tr>
-    <tr><th>Una agente que se llama igual que una clienta</th><td>Dos personas con llaves distintas (KP-… y CL-…): nunca se fusionan por nombre; la evidencia del registro decide a quién se refiere cada mención.</td><td class="nw"><span class="tag code">código</span></td></tr>
-    <tr><th>El bot nombra al agente en el handoff; los agentes repiten correos y celulares de clientes</th><td>No resolvemos solo por autor: cada correo o celular del texto se asigna a su dueño en el registro, no a quien lo escribe.</td><td class="nw"><span class="tag code">código</span></td></tr>
-    <tr><th>Barrio + ocupación + año</th><td>Se rompe en la unión. En el chat: barrio → ciudad, ocupación → sector, año → "hace unos años". En <code>clientes.csv</code>: ocupación → sector y barrio seudónimo.</td><td class="nw"><span class="tag code">código</span></td></tr>
-    <tr><th>Relación "reporta a" entre empleados</th><td>El jefe es la misma persona del registro: recibe el mismo seudónimo en su fila y en la del subordinado.</td><td class="nw"><span class="tag code">código</span></td></tr>
-    <tr><th>Apellido que también es lugar o marca ("Pereira", "Rosario")</th><td>Lista de conservados + contexto: si nombra a una persona, es apellido y se reemplaza. El residuo ambiguo es el primer trabajo de la Rama de IA.</td><td class="nw"><span class="tag code">código</span> <span class="tag ai">IA</span></td></tr>
-    <tr><th>2 documentos en inglés</th><td>Los detectores no dependen del idioma; los nombres salen del registro.</td><td class="nw"><span class="tag code">código</span></td></tr>
+    <tr><th>Nombres en MAYÚSCULAS sin tildes</th><td data-label="Cómo">Se compara sobre texto normalizado y el seudónimo conserva la forma: mayúsculas, sin tildes, completo o corto.</td></tr>
+    <tr><th>Correos deletreados con "arroba" y "punto"</th><td data-label="Cómo">Una regex los reconstruye y el reemplazo se vuelve a deletrear.</td></tr>
+    <tr><th>Placas y pasaportes</th><td data-label="Cómo">Patrones propios (el pasaporte exige la palabra clave cercana); el reemplazo conserva el formato.</td></tr>
+    <tr><th>Nombres fuera del texto visible</th><td data-label="Cómo">Se procesan también metadatos de PDF y HTML, front matter, comentarios HTML, texto oculto, nombres de archivo y adjuntos; se reemplaza el valor y la clave se conserva.</td></tr>
+    <tr><th>Menciones de Slack</th><td data-label="Cómo">El autor de cada mensaje se resuelve con su perfil de usuario y recibe el seudónimo de esa persona; las menciones <code>&lt;@UID&gt;</code> del texto se dejan como están (el uid no es un nombre).</td></tr>
+    <tr><th>Dos clientas con el mismo nombre completo</th><td data-label="Cómo">Cada una es una persona por su llave. Cada mención se asigna por autor, dueño del registro y participantes del hilo; si siguen empatadas, por un correo, cédula, celular o llave del mismo registro, o por la fecha y el monto de una transacción citada; entre empleado y cliente decide el contexto de la línea (cargo, @kipupay.co, llave de cliente). En documentos que nombran a varias clientas, la línea del documento decide entre homónimos con su propio identificador.</td></tr>
+    <tr><th>Una agente que se llama igual que una clienta</th><td data-label="Cómo">Son dos personas con llaves distintas. Si un nombre corto coincide con las dos y nada más decide, decide el contexto: una fila de empleados o un registro de una empleada indica colega; en la línea de la mención, un cargo o el buzón corporativo indican colega, y una llave o un identificador de cliente indican clienta. Sin señales, se elige a la clienta. Al vincular usuarios de chat, filtro por tipo de persona.</td></tr>
+    <tr><th>El bot nombra al agente; los agentes repiten correos y celulares de clientes</th><td data-label="Cómo">No se resuelve solo por autor: cada correo o celular del texto se asigna a su dueño en el registro, no a quien lo escribe. Al vincular usuarios de chat, evidencia dura contra la fila maestra: últimos 4 dígitos de la cédula o el celular, dirección y fecha de nacimiento escrita en largo.</td></tr>
+    <tr><th>Barrio + ocupación + año</th><td data-label="Cómo">En la tabla de clientes, la ocupación pasa a su sector y el barrio a otro de la misma ciudad. En texto libre, en cualquier redacción, se generalizan cuando la ocupación sigue a una pista, cuando alguno coincide con la fila maestra del cliente vinculado o, sin cliente vinculado, cuando ocupación y barrio aparecen juntos: ocupación → sector, barrio → ciudad, año → "hace unos años". Un lugar mencionado solo se conserva.</td></tr>
+    <tr><th>Relación "reporta a" entre empleados</th><td data-label="Cómo">La columna se resuelve solo entre empleados, así el jefe lleva su mismo seudónimo aunque una clienta comparta su nombre corto.</td></tr>
+    <tr><th>Apellido que también es lugar o marca</th><td data-label="Cómo">Una lista de organizaciones, marcas, lugares y figuras públicas se conserva, también cuando la marca abre un tramo más largo con mayúscula; al cargar el estado se descarta una «persona» de marca que guardó una versión anterior. Donde ese nombre nombra a la persona anclada en el registro (autor, dueño, participante o dueño de un identificador), se reemplaza.</td></tr>
+    <tr><th>Mención ambigua</th><td data-label="Cómo">Desempate fijo: autor, dueño del registro, participantes del hilo, evidencia dura y el handle de la persona en el texto; entre una clienta y una empleada decide el contexto. Si nada decide, una regla determinista dentro del mismo tipo y una advertencia. Al vincular usuarios de chat, pase de eliminación entre candidatos.</td></tr>
+    <tr><th>Documentos en inglés</th><td data-label="Cómo">Las fechas de nacimiento conservan su formato (mes/día/año).</td></tr>
   </tbody>
 </table></div>
 
@@ -100,88 +101,70 @@
 <div class="tbl stack-sm"><table class="w-md">
   <thead><tr><th>Supuesto</th><th>Razón</th></tr></thead>
   <tbody>
-    <tr><td>"Persona" = toda persona natural: clientes, agentes, empleados y terceros nombrados.</td><td data-label="Razón">Cualquiera puede ser re-identificada; el comprador necesita los diálogos, no las identidades.</td></tr>
-    <tr><td>La identidad es una llave estable (CL-…, KP-…, uid de chat), no un nombre.</td><td data-label="Razón">Hay homónimas y una agente que se llama como una clienta, y las fuentes crecen: la llave no cambia.</td></tr>
-    <tr><td>Fechas de negocio y montos se conservan; la fecha de nacimiento se reemplaza.</td><td data-label="Razón">Cuotas, pagos y plazos son el contenido del soporte; la fecha de nacimiento identifica.</td></tr>
+    <tr><td>"Persona" = toda persona natural: clientes, empleados, autores de chat y terceros nombrados.</td><td data-label="Razón">Cualquiera puede ser re-identificada; el comprador necesita los diálogos, no las identidades.</td></tr>
+    <tr><td>La identidad es una llave estable (cliente, empleado, usuario de chat), no un nombre.</td><td data-label="Razón">Hay homónimas y una agente que se llama como una clienta, y las fuentes crecen: la llave no cambia.</td></tr>
+    <tr><td>Un nombre de pila suelto que nada decide puede quedar como está; si solo una persona lo lleva, recibe el seudónimo de esa persona.</td><td data-label="Razón">No identifica por sí solo; reemplazarlo al azar dañaría el texto.</td></tr>
   </tbody>
 </table></div>
-
-<h3>Fuera de alcance</h3>
-<div class="tbl stack-sm"><table class="w-md">
-  <thead><tr><th>Qué</th><th>Por qué</th></tr></thead>
-  <tbody>
-    <tr><td>OCR de imágenes dentro de PDF</td><td data-label="Por qué">El cuerpo de salida es texto en markdown; trabajamos con el texto extraíble y la metadata.</td></tr>
-    <tr><td>Revisión humana en el ciclo</td><td data-label="Por qué">No hay tiempo en un día; la reemplazan la muestra con su salida ideal, los tests y la autoverificación.</td></tr>
-  </tbody>
-</table></div>
+<p class="note">Fuera de alcance: OCR de imágenes dentro de PDF (la salida es el texto extraíble y la metadata) y revisión humana en el ciclo (la reemplazan la muestra con su salida ideal, los tests y la autoverificación).</p>
 </section>
 
 <section class="sec" id="arquitectura">
 <div class="sec-head"><h2><span class="n">2</span> Arquitectura</h2><a class="path" href="#arquitectura">/diseno/#arquitectura</a></div>
-<p>Un servicio FastAPI en un contenedor siempre encendido en Railway, con disco persistente (volumen en <code>/data</code>). v1 es solo código; la Rama de IA es el siguiente paso, solo para el residuo ambiguo.</p>
+<p>Un servicio FastAPI en un contenedor siempre encendido en Railway, con un volumen persistente en <code>/data</code>. Hoy todo es código; la Rama de IA es el siguiente paso.</p>
 <ol class="listing">
-  <li><b>Ingesta.</b> Descarga del API de fuentes con límite de ritmo propio (&lt; 600 peticiones/min), reintentos con backoff y ETag; CSV y XML tal como salen de los sistemas.</li>
-  <li><b>Normalización al esquema de salida.</b> Un registro por mensaje (<code>author</code> por nombre, nunca uid), por documento (markdown + metadata con sus mismas claves) y por fila (<code>columns</code> como texto).</li>
-  <li><b>Registro de personas, tablas primero.</b> Clientes (CL-…), empleados (KP-…) y perfiles de chat (uid) dan ids estables y todas las formas conocidas: variantes de nombre, correos, celulares, cédula, dirección, placas. <span class="tag store">state.json</span></li>
-  <li class="is-ia"><b>Detección, de barata a cara.</b>
+  <li><b>Ingesta.</b> Descarga bajo un límite propio de 500 peticiones/min, con reintentos ante 429 y 5xx, en una carpeta temporal que se mueve de forma atómica. Al final re-chequea <code>record_index</code> con ETag y, si las fuentes crecieron durante la descarga, descarga de nuevo.</li>
+  <li><b>Normalización.</b> Chats, documentos (md, html, pdf → markdown con su metadata) y tablas (CSV y XML) al esquema de salida; los ids se concilian con <code>record_index</code>.</li>
+  <li><b>Registro de personas, tablas primero.</b> Clientes, empleados y perfiles de chat, con sus identificadores duros. Un cliente migrado con id nuevo se une a uno existente solo si su cédula coincide con exactamente uno. <span class="tag store">state.json</span></li>
+  <li class="is-ia"><b>Detección.</b>
     <ul class="layers">
-      <li><span class="lk">(a)</span> Reglas + validadores: cédula, celulares, correos (también deletreados), placas, pasaportes, cuentas, llaves de tabla <span class="tag code">código</span></li>
-      <li><span class="lk">(b)</span> Formas conocidas del registro sobre texto normalizado (tildes, mayúsculas, separadores) <span class="tag code">código</span></li>
-      <li><span class="lk">(c)</span> Heurística acotada para nombres completos desconocidos (léxico de nombres + apellido): lo que parece personal se reemplaza <span class="tag code">código</span></li>
-      <li><span class="lk">(d)</span> Siguiente paso, Rama de IA: solo el residuo ambiguo, con caché y respaldo fail-closed <span class="tag ai">IA</span></li>
+      <li><span class="lk">(a)</span> Reglas: nombres conocidos y desconocidos, correos (también deletreados), celulares, cédulas, direcciones, fechas de nacimiento ya registradas, placas, pasaportes, números de cuenta bancaria y de tarjeta (Luhn) junto a palabras clave, pólizas, direcciones IPv4 y "inicial + apellido" de una persona conocida, handles y slugs; lista de términos conservados <span class="tag code">código</span></li>
+      <li><span class="lk">(b)</span> Siguiente paso, Rama de IA: solo el residuo ambiguo, con caché y fail-closed <span class="tag ai">IA</span></li>
     </ul></li>
-  <li><b>Resolución de entidades.</b> Cada mención → persona por evidencia: llave o identificador cercano (cédula, correo, celular, radicado, fecha + monto, adjunto).</li>
-  <li><b>Seudónimos deterministas.</b> <code>HMAC(secreto, id de persona)</code> elige un nombre del mismo género y valores con formato válido. El mapa se persiste: una persona ya publicada nunca cambia de seudónimo y dos personas nunca comparten uno.</li>
-  <li><b>Cuasi-identificadores.</b> Barrio + ocupación + año se generaliza en la unión: chat y fila de <code>clientes.csv</code>.</li>
-  <li><b>Reemplazo por fragmentos.</b> Se reemplaza, nunca se reescribe: el texto no personal queda idéntico; ids 1:1.</li>
-  <li class="is-gate"><b>Autoverificación.</b> Mismo emparejamiento que el validador (normalización, confusables, separadores de dígitos): <code>entities.json</code> solo declara seudónimos que aparecen, y toda forma original que siga en la salida se reporta como fuga en <code>report.json</code>. <span class="tag danger">compuerta</span></li>
-  <li><b>/anonymize.</b> Mismo motor y mismo <code>state.json</code>: una persona ya vista recibe su seudónimo de <code>output/</code>; una nueva, uno nuevo y único.</li>
+  <li><b>Vinculación.</b> Cada mención → persona: autor, dueño del registro, participantes del hilo, evidencia dura (correo, cédula, celular, llave, o la fecha y el monto de una transacción) y el handle de la persona en el texto. Entre un cliente y un empleado con el mismo nombre corto decide el contexto de la línea y del registro; sin señales, el cliente. En documentos, la línea de la mención decide primero con su propio identificador. Si nada decide, regla determinista con advertencia. Al vincular usuarios de chat: filtro por tipo, pase de eliminación y evidencia dura contra la fila maestra (últimos 4 dígitos de cédula o celular, dirección, fecha de nacimiento larga).</li>
+  <li><b>Seudónimos deterministas.</b> Cada valor sale de HMAC-SHA256(secreto, persona), con la categoría, el género y el formato del original. Los valores reales de todos se reservan para que ningún seudónimo coincida con uno; un valor ya publicado gana sobre uno nuevo, y dos personas nunca comparten una fecha de nacimiento seudónima.</li>
+  <li><b>Cuasi-identificadores.</b> Ocupación y barrio generalizados en la tabla de clientes; en texto libre, ocupación, barrio y año, en cualquier redacción y también contra la fila maestra del cliente.</li>
+  <li><b>Reemplazo por fragmentos.</b> Se reemplaza, nunca se reescribe: fuera de los datos personales y de los cuasi-identificadores generalizados, el texto queda idéntico; ids 1:1.</li>
+  <li class="is-gate"><b>Autoverificación.</b> Busca cada forma real en toda la salida con la normalización del jurado (NFKC, tildes, confusables, separadores de dígitos). Cada hallazgo se repara: se reemplaza por el seudónimo de esa persona en el mismo estilo y la salida se vuelve a verificar, hasta dos veces. Lo que aún queda no se declara en <code>entities.json</code> y va a <code>report.json</code>, porque el validador oficial rechazaría la salida completa: cuesta puntos de fuga (los tests que lo revisen y el barrido global) y algo de honestidad, pero nunca la corrida. Medido: 0 valores retirados en ambos corpus. <span class="tag danger">compuerta</span></li>
+  <li><b>Publicación atómica.</b> Los 4 archivos se escriben en una carpeta temporal, se renombran y el puntero <code>CURRENT</code> cambia al final. <code>state.json</code> se escribe atómico y deja una instantánea por corrida.</li>
+  <li><b>/anonymize en vivo.</b> Usa el mismo <code>state.json</code> y repite el contexto de hilo de la corrida, así una persona ya vista recibe su seudónimo de <code>output/</code>. Una persona nueva recibe uno nuevo y único, que no se guarda en <code>state.json</code>: vive solo en la memoria del servidor hasta la próxima corrida o un reinicio.</li>
 </ol>
 
 <h3>Endpoints</h3>
 <div class="tbl stack-sm"><table class="w-md api">
   <thead><tr><th>Método</th><th>Ruta</th><th>Qué hace</th></tr></thead>
   <tbody>
-    <tr><td class="nw inl"><code>GET</code></td><td class="nw inl"><code>/health</code></td><td><code>{status:"ok", team, version, models}</code>; <code>models</code> vacío en v1 (sin LLM).</td></tr>
-    <tr><td class="nw inl"><code>POST</code></td><td class="nw inl"><code>/run</code></td><td>Recibe <code>{sources_url, token}</code> y responde 202 <code>{job_id}</code>. Idempotente: si hay una corrida activa, devuelve esa.</td></tr>
-    <tr><td class="nw inl"><code>GET</code></td><td class="nw inl"><code>/run/{job_id}</code></td><td><code>status</code> (<code>queued</code> · <code>running</code> · <code>done</code> · <code>failed</code>), registros por fuente y costo en tokens y segundos.</td></tr>
-    <tr><td class="nw inl"><code>GET</code></td><td class="nw inl"><code>/output/{archivo}</code></td><td>Uno de los 4 archivos de la última corrida terminada; 404 si no hay.</td></tr>
-    <tr><td class="nw inl"><code>POST</code></td><td class="nw inl"><code>/anonymize</code></td><td>Recibe <code>{source, records}</code> (hasta 50) y devuelve los mismos ids anonimizados más las entidades que intervinieron.</td></tr>
-    <tr><td class="nw inl"><code>GET</code></td><td class="nw inl"><code>/entities</code></td><td>El diccionario completo de la última corrida; solo lo llama el jurado.</td></tr>
+    <tr><td class="nw inl"><code>GET</code></td><td class="nw inl"><code>/health</code></td><td><code>{status, team, version, models}</code>; <code>models</code> vacío (sin LLM).</td></tr>
+    <tr><td class="nw inl"><code>POST</code></td><td class="nw inl"><code>/run</code></td><td>Recibe <code>{sources_url, token}</code> y responde 202 <code>{job_id}</code>. Si ya hay una corrida en curso, devuelve esa.</td></tr>
+    <tr><td class="nw inl"><code>GET</code></td><td class="nw inl"><code>/run/{job_id}</code></td><td>Estado, registros por fuente, costo en tokens y segundos, y el error si falló.</td></tr>
+    <tr><td class="nw inl"><code>GET</code></td><td class="nw inl"><code>/output/{archivo}</code></td><td>Uno de los 4 archivos de la última corrida terminada; 404 antes de la primera.</td></tr>
+    <tr><td class="nw inl"><code>POST</code></td><td class="nw inl"><code>/anonymize</code></td><td>Hasta 50 registros; 55 s máx. por lote (504) y 422 si un registro está fuera de esquema.</td></tr>
+    <tr><td class="nw inl"><code>GET</code></td><td class="nw inl"><code>/entities</code></td><td>El diccionario completo de la última corrida; solo para el jurado.</td></tr>
   </tbody>
 </table></div>
-<p class="note">Raíz <code>/v1</code>, sin autenticación, como fija el contrato del reto. El <code>token</code> que recibe <code>/run</code> es el del API de fuentes: se guarda con permiso 600 solo mientras dura la corrida.</p>
 
-<h3>Qué se persiste (disco en <code>/data</code>)</h3>
+<h3>Qué se persiste (volumen en <code>/data</code>)</h3>
 <div class="tbl stack-sm"><table class="w-lg model">
   <thead><tr><th>Archivo</th><th>Qué guarda</th><th>Para qué</th></tr></thead>
   <tbody>
-    <tr><td class="nw"><code>state.json</code></td><td><span class="mono">registro de personas, mapa de seudónimos, ids de entidad</span></td><td data-label="Para qué">Toda persona publicada conserva su seudónimo entre corridas y en /anonymize. Escritura atómica (tmp + rename) y copia fechada tras cada corrida.</td></tr>
-    <tr><td class="nw"><code>jobs/&lt;job_id&gt;.json</code></td><td><span class="mono">estado, registros y costo</span></td><td data-label="Para qué">/run/{id} responde aunque muera el proceso de la corrida; reemplazo atómico.</td></tr>
-    <tr><td class="nw"><code>output/&lt;job_id&gt;/</code> + <code>CURRENT</code></td><td><span class="mono">los 4 archivos + report.json; puntero a la última corrida completa</span></td><td data-label="Para qué">/output nunca sirve una corrida a medias.</td></tr>
-    <tr><td class="nw"><code>raw/&lt;fecha&gt;/</code></td><td><span class="mono">copia de las fuentes descargadas</span></td><td data-label="Para qué">Diagnóstico; nunca se sirve por la API.</td></tr>
+    <tr><td class="nw"><code>state.json</code></td><td><span class="mono">registro de personas, mapa de seudónimos, ids de entidad, contexto de hilos</span></td><td data-label="Para qué">Que toda persona publicada conserve su seudónimo. Escritura atómica; ~0,6 MB medido.</td></tr>
+    <tr><td class="nw"><code>history/state-&lt;fecha&gt;.json</code></td><td><span class="mono">una instantánea por corrida</span></td><td data-label="Para qué">Punto de retorno y evidencia antes/después del incidente.</td></tr>
+    <tr><td class="nw"><code>jobs/&lt;job_id&gt;.json</code></td><td><span class="mono">estado, registros, costo, historial</span></td><td data-label="Para qué">/run/{id} responde aunque muera el proceso de la corrida.</td></tr>
+    <tr><td class="nw"><code>output/&lt;job_id&gt;/</code> + <code>CURRENT</code></td><td><span class="mono">los 4 archivos + report.json; se guardan las últimas 3</span></td><td data-label="Para qué">/output nunca sirve una corrida a medias.</td></tr>
+    <tr><td class="nw"><code>raw/&lt;fecha&gt;/</code></td><td><span class="mono">copia cruda de las fuentes</span></td><td data-label="Para qué">Diagnóstico; nunca se sirve.</td></tr>
   </tbody>
 </table></div>
-
-<h3>Cuándo migrar a PostgreSQL</h3>
-<ul class="dash">
-  <li><b>Hoy basta un archivo:</b> un solo escritor por corrida, <code>state.json</code> &lt; 2 MB, sin consultas, escritura atómica y fácil de comparar antes y después del crecimiento de las fuentes.</li>
-  <li><b>Migrar cuando</b> haya varias réplicas o inquilinos escribiendo a la vez, millones de registros, consultas sobre los datos o necesidades de auditoría y retención.</li>
-  <li><b>Destino:</b> PostgreSQL para el registro (<code>personas</code>, <code>identificadores</code>, <code>seudonimos</code> con <code>UNIQUE(tipo, valor)</code>, <code>corridas</code>, <code>auditoria</code>) con un lock por corrida, almacenamiento de objetos para las salidas y una cola de trabajos con workers.</li>
-  <li><b>Sin cambiar seudónimos:</b> mismos contratos y mismo determinismo HMAC, así la migración no altera ningún seudónimo publicado.</li>
-</ul>
 
 <h3>Stack</h3>
 <ul class="stack">
   <li>Python 3.12 · FastAPI · uvicorn</li>
   <li>httpx</li>
   <li>pypdf · markdownify · pyyaml</li>
-  <li>re · unicodedata (normalización y confusables)</li>
-  <li>listas propias de nombres colombianos por género</li>
-  <li class="store">disco persistente (volumen /data)</li>
-  <li>pytest + muestra + validador oficial</li>
-  <li class="ai">Rama de IA (siguiente paso): modelo pequeño vía OpenRouter, JSON + caché</li>
-  <li>Railway</li>
+  <li>re · unicodedata · hmac (biblioteca estándar)</li>
+  <li>léxico propio: nombres, apellidos, lugares, ocupaciones</li>
+  <li class="store">volumen persistente /data</li>
+  <li>Docker (python:3.12-slim + uv) · Railway, 1 réplica</li>
+  <li>pytest · validador oficial · tests públicos y de la muestra</li>
 </ul>
 <p class="more"><a href="/arquitectura/">Ver diagrama completo →</a></p>
 </section>
@@ -191,113 +174,108 @@
 <div class="tbl stack-sm"><table class="w-lg dec">
   <thead><tr><th>Decisión</th><th>Elegimos</th><th>Descartamos</th><th>Por qué</th></tr></thead>
   <tbody>
-    <tr><th><span class="dn">D1</span> Infraestructura</th><td data-label="Elegimos">Contenedor siempre encendido (Railway) + disco persistente</td><td data-label="Descartamos">Laptop con túnel · funciones serverless</td><td data-label="Por qué">Una caída en plena corrida la gasta sin puntaje, y la plataforma advierte que una caída en el debrief impide correr el set oculto. Serverless: sin trabajo en segundo plano tras responder y con límite de duración.</td></tr>
-    <tr><th><span class="dn">D2</span> Uso del LLM</th><td data-label="Elegimos">v1 solo reglas; Rama de IA después, solo para el residuo ambiguo (caché + fail-closed) <span class="tag code">código</span> <span class="tag ai">IA</span></td><td data-label="Descartamos">Todo-LLM · reescribir el texto con un modelo</td><td data-label="Por qué">El material da ≈ 88 a una solución sólida por reglas (hashear: 58; <code>[REDACTED]</code>: 56). Reescribir pierde parecido con la salida ideal y puede inventar o borrar datos: se reemplaza, nunca se reescribe.</td></tr>
-    <tr><th><span class="dn">D3</span> Seudónimos</th><td data-label="Elegimos">Deterministas (HMAC) + mapa persistido</td><td data-label="Descartamos">Aleatorios por corrida · <code>[REDACTED]</code> · hash</td><td data-label="Por qué">Los aleatorios rompen la consistencia cuando crecen las fuentes; <code>[REDACTED]</code> y el hash pierden categoría, homónimos y estructura.</td></tr>
-    <tr><th><span class="dn">D4</span> Identidad</th><td data-label="Elegimos">Llaves estables (CL-…, KP-…, uid de chat)</td><td data-label="Descartamos">Agrupar por nombre · resolver solo por autor</td><td data-label="Por qué">El nombre no es único (homónimas, agente = clienta), y el bot y los agentes nombran a otras personas en sus mensajes.</td></tr>
-    <tr><th><span class="dn">D5</span> Lo desconocido</th><td data-label="Elegimos">Fail-closed: lo que parece personal y no se reconoce se reemplaza</td><td data-label="Descartamos">Dejar pasar</td><td data-label="Por qué">Fuga pesa 45; según el material, detectar el 70 % de las personas da 76.</td></tr>
-    <tr><th>Cuasi-identificadores</th><td data-label="Elegimos">Generalizar en la unión (chat + <code>clientes.csv</code>)</td><td data-label="Descartamos">Borrar · romper solo en el chat</td><td data-label="Por qué">Borrar quita contexto; si solo se rompe el chat, la fila del maestro sigue identificando.</td></tr>
-    <tr><th>Estado</th><td data-label="Elegimos"><code>state.json</code> atómico en el disco del contenedor</td><td data-label="Descartamos">PostgreSQL gestionado</td><td data-label="Por qué">Un solo escritor por vez: un archivo con tmp + rename es atómico, fácil de inspeccionar y no agrega otro servicio que pueda caerse.</td></tr>
+    <tr><th><span class="dn">D1</span> Infraestructura</th><td data-label="Elegimos">Contenedor siempre encendido (Railway) + volumen persistente</td><td data-label="Descartamos">Laptop con túnel · funciones serverless</td><td data-label="Por qué">Si el servicio deja de responder durante una corrida, la corrida termina sin puntaje y cuenta como usada. Las funciones serverless no tienen disco persistente, no permiten trabajo en segundo plano tras responder y tienen límite de duración.</td></tr>
+    <tr><th><span class="dn">D2</span> Uso del LLM</th><td data-label="Elegimos">Reglas primero; la Rama de IA queda para el residuo ambiguo <span class="tag code">código</span></td><td data-label="Descartamos">Todo-LLM · reescribir el texto con un modelo</td><td data-label="Por qué">Las reglas pasan el validador y los tests públicos con 0 tokens. Reescribir pierde parecido con la salida ideal y puede inventar o borrar datos.</td></tr>
+    <tr><th><span class="dn">D3</span> Seudónimos</th><td data-label="Elegimos">Deterministas (HMAC) + mapa persistido</td><td data-label="Descartamos">Aleatorios · <code>[NOMBRE]</code> · hash</td><td data-label="Por qué">Los aleatorios rompen la consistencia al crecer las fuentes; los marcadores y el hash pierden categoría, homónimos y estructura.</td></tr>
+    <tr><th><span class="dn">D4</span> Identidad</th><td data-label="Elegimos">Tablas como ancla; fusión por identificador duro (cédula, correo). Un perfil de chat sin correo que coincida se une solo si su nombre completo coincide exacto con una única persona; ante homónimos decide la evidencia del hilo y, si no hay, no se fusiona.</td><td data-label="Descartamos">Agrupar por nombre parcial, ciudad o cargo</td><td data-label="Por qué">El nombre solo no distingue personas: se usa únicamente cuando es exacto y no hay otra persona con él.</td></tr>
+    <tr><th><span class="dn">D5</span> Lo desconocido</th><td data-label="Elegimos">Fail-closed: lo que parece personal y no se puede clasificar se reemplaza</td><td data-label="Descartamos">Dejar pasar</td><td data-label="Por qué">La fuga pesa 45 de 100.</td></tr>
+    <tr><th>Estado</th><td data-label="Elegimos"><code>state.json</code> atómico en el volumen</td><td data-label="Descartamos">PostgreSQL gestionado</td><td data-label="Por qué">Un solo escritor por corrida y ~0,6 MB: un archivo es atómico, fácil de comparar y no agrega otro servicio que pueda caerse.</td></tr>
+    <tr><th>Autoverificación</th><td data-label="Elegimos">Reparar lo que se escapa y volver a verificar; lo que quede, no declararlo y registrarlo</td><td data-label="Descartamos">Declararlo igual · solo registrarlo</td><td data-label="Por qué">El validador rechazaría la salida completa y la corrida se perdería.</td></tr>
     <tr><th>Lenguaje</th><td data-label="Elegimos">Python</td><td data-label="Descartamos">C#/.NET</td><td data-label="Por qué">Ecosistema de texto (unicodedata, pypdf, markdownify) e iteración rápida en un día.</td></tr>
   </tbody>
 </table></div>
 </section>
 
-<section class="sec" id="crecimiento">
-<div class="sec-head"><h2><span class="n">4</span> Las fuentes crecen</h2><a class="path" href="#crecimiento">/diseno/#crecimiento</a></div>
-<p>En algún momento (agenda: 15:00) el API de fuentes sirve más datos: fechas, canales, documentos y filas nuevas; nada se borra ni cambia. La última corrida antes del cambio vale 30 % y la última después, 70 %; sin corrida antes, ese 30 % queda en 0. Por eso la corrida #1 se gasta antes del cambio.</p>
-<div class="tbl stack-sm"><table class="w-md">
-  <thead><tr><th>Regla</th><th>Nuestra respuesta</th></tr></thead>
-  <tbody>
-    <tr><th>Toda persona ya publicada conserva exactamente su seudónimo (se compara <code>entities.json</code> antes y después)</th><td data-label="Nuestra respuesta">Ids de persona estables desde las llaves (CL-…, KP-…) y los uids de chat + mapa de seudónimos persistido + determinismo HMAC.</td></tr>
-    <tr><th>Una persona conocida con un identificador nuevo es la misma persona</th><td data-label="Nuestra respuesta">El identificador nuevo se suma a su registro por la llave que lo acompaña; el seudónimo no cambia.</td></tr>
-    <tr><th>Una persona nueva con un nombre conocido es otra persona</th><td data-label="Nuestra respuesta">Llave nueva = persona nueva = seudónimo nuevo y único, aunque el nombre coincida.</td></tr>
-  </tbody>
-</table></div>
-<ol class="track seq" aria-label="Secuencia ante el crecimiento">
-  <li class="st"><span class="st-k">1</span><b>Detectar<span class="sr-only">:</span></b><small>un vigía con ETag guarda qué llegó</small></li>
-  <li class="st"><span class="st-k">2</span><b>Regenerar<span class="sr-only">:</span></b><small>corrida completa: viejos + nuevos</small></li>
-  <li class="st"><span class="st-k">3</span><b>Verificar<span class="sr-only">:</span></b><small>mismos seudónimos en entities.json antes y después</small></li>
-  <li class="st"><span class="st-k">4</span><b>Explicar<span class="sr-only">:</span></b><small>diferencia y conteos por corrida</small></li>
-</ol>
-</section>
-
-<section class="sec" id="fiabilidad">
-<div class="sec-head"><h2><span class="n">5</span> Fiabilidad de la corrida</h2><a class="path" href="#fiabilidad">/diseno/#fiabilidad</a></div>
-<p>Regla del material: <b>si el servicio deja de responder durante una corrida, la corrida termina sin puntaje y cuenta como usada.</b></p>
-<div class="tbl stack-sm"><table class="w-md">
-  <thead><tr><th>Riesgo</th><th>Qué hacemos</th></tr></thead>
-  <tbody>
-    <tr><th>La API deja de responder mientras corre el pipeline</th><td data-label="Qué hacemos">El pipeline corre en un proceso aparte; la API solo lee estados en disco, así <code>/health</code> y <code>/run/{id}</code> siempre responden.</td></tr>
-    <tr><th>El proceso de la corrida muere</th><td data-label="Qué hacemos">Un monitor lo relanza (máximo 2 veces) si termina sin estado final.</td></tr>
-    <tr><th>El API de fuentes falla o limita</th><td data-label="Qué hacemos">Reintentos con backoff, límite de ritmo propio por debajo de 600 peticiones/min y re-chequeo con ETag.</td></tr>
-    <tr><th>Salida a medias</th><td data-label="Qué hacemos">Los 4 archivos se escriben en la carpeta de la corrida y el puntero <code>CURRENT</code> cambia solo cuando están completos.</td></tr>
-    <tr><th>La corrida se alarga</th><td data-label="Qué hacemos">Watchdog: a los 115 min se corta y queda <code>failed</code> con su error, antes del límite de 2 h.</td></tr>
-    <tr><th>El LLM no está disponible</th><td data-label="Qué hacemos">Ningún paso depende de él: v1 no lo usa y la Rama de IA tendrá respaldo fail-closed.</td></tr>
-  </tbody>
-</table></div>
-</section>
-
-<section class="sec" id="medir">
-<div class="sec-head"><h2><span class="n">6</span> Plan para medir</h2><a class="path" href="#medir">/diseno/#medir</a></div>
-<p>Medimos con lo que trae el material, antes de gastar una corrida. Un solo comando (<code>check_local</code>) corre pipeline → validador → tests sobre la muestra o sobre el corpus real.</p>
-<ul class="dash">
-  <li><b>Muestra</b> con su salida ideal completa y 13 tests, y <b>5 tests públicos</b> sobre el corpus real.</li>
-  <li><b>Validador oficial</b> (<code>node validar.mjs</code>): una salida que no lo pasa gasta la corrida sin puntaje.</li>
-  <li><b>Autoverificación propia</b> con el mismo emparejamiento que el validador.</li>
-</ul>
-<p class="note">Las metas son metas, no resultados medidos.</p>
-<div class="tbl stack-sm"><table class="w-lg metrics">
-  <thead><tr><th>Dimensión (peso)</th><th>Métrica</th><th>Meta</th><th>Cómo se mide</th></tr></thead>
-  <tbody>
-    <tr><th rowspan="3" class="grp-h">Fuga (45)</th><td>Tests de fuga de la muestra y públicos</td><td class="num" data-label="Meta">100 %</td><td data-label="Cómo se mide"><code>check_local</code></td></tr>
-    <tr><td>Forma original que sigue en la salida</td><td class="num" data-label="Meta">0</td><td data-label="Cómo se mide">Autoverificación (<code>report.json</code>)</td></tr>
-    <tr><td>Barrio + ocupación + año juntos en chat o fila</td><td class="num" data-label="Meta">0</td><td data-label="Cómo se mide">Tests de la muestra</td></tr>
-  </tbody>
-  <tbody>
-    <tr><th rowspan="3" class="grp-h">Utilidad (35)</th><td>Ids 1:1 con <code>record_index</code>; ninguna clave perdida</td><td class="num" data-label="Meta">2.028 / 26 / 6.243</td><td data-label="Cómo se mide">Validador oficial</td></tr>
-    <tr><td>Bancos, marcas, lugares y figuras públicas intactos</td><td class="num" data-label="Meta">100 %</td><td data-label="Cómo se mide">Muestra vs. salida ideal</td></tr>
-    <tr><td>Texto no personal sin cambios</td><td class="num" data-label="Meta">100 %</td><td data-label="Cómo se mide">Diff contra la salida ideal de la muestra</td></tr>
-  </tbody>
-  <tbody>
-    <tr><th rowspan="5" class="grp-h">Consistencia (20)</th><td>Misma persona → mismo seudónimo en todas las fuentes</td><td class="num" data-label="Meta">100 %</td><td data-label="Cómo se mide">Muestra + <code>entities.json</code></td></tr>
-    <tr><td>Homónimas y agente = clienta → seudónimos distintos</td><td class="num" data-label="Meta">100 %</td><td data-label="Cómo se mide">Tests de la muestra</td></tr>
-    <tr><td>"Reporta a" entre empleados intacto</td><td class="num" data-label="Meta">100 %</td><td data-label="Cómo se mide"><code>tables.jsonl</code> vs. entrada</td></tr>
-    <tr><td>Misma entrada → misma salida; con datos nuevos, toda persona ya publicada conserva su seudónimo</td><td class="num" data-label="Meta">Sí</td><td data-label="Cómo se mide">Hash de archivos; <code>entities.json</code> antes y después</td></tr>
-    <tr><td>/anonymize con una persona ya vista → su seudónimo de <code>output/</code></td><td class="num" data-label="Meta">100 %</td><td data-label="Cómo se mide">Prueba de contrato</td></tr>
-  </tbody>
-  <tbody>
-    <tr><th class="grp-h">Formato</th><td>Seudónimos válidos para su categoría</td><td class="num" data-label="Meta">100 %</td><td data-label="Cómo se mide">Validadores de formato (cédula, correo, celular, placa)</td></tr>
-  </tbody>
-  <tbody>
-    <tr><th rowspan="2" class="grp-h">Rendimiento</th><td>/run completo</td><td class="num" data-label="Meta">&lt; 30 min</td><td data-label="Cómo se mide"><code>cost.seconds</code> en /run/{id}; límite 2 h</td></tr>
-    <tr><td>/anonymize por lote de 50</td><td class="num" data-label="Meta">&lt; 15 s</td><td data-label="Cómo se mide">Prueba local; límite 60 s</td></tr>
-  </tbody>
-  <tbody>
-    <tr><th class="grp-h">Costo</th><td>Tokens de LLM por corrida</td><td class="num" data-label="Meta">0 en v1</td><td data-label="Cómo se mide"><code>cost.tokens_in</code> / <code>tokens_out</code></td></tr>
-  </tbody>
-</table></div>
-<h3>Plan de las 3 corridas</h3>
-<p>Ninguna corrida se gasta sin el validador oficial, la muestra y los 5 tests públicos en verde.</p>
+<section class="sec" id="incidente">
+<div class="sec-head"><h2><span class="n">4</span> Incidente INC-PII-01</h2><a class="path" href="#incidente">/diseno/#incidente</a></div>
+<p>Regla del reto: toda persona ya publicada conserva exactamente su seudónimo; una persona conocida con un identificador nuevo es la misma; una persona nueva que se llama como una vieja es otra.</p>
 <div class="tbl stack-sm"><table class="kv">
   <tbody>
-    <tr><th class="nw">Corrida 1</th><td>Antes del crecimiento: asegura el 30 %; mide el 60 % de los ocultos.</td></tr>
-    <tr><th class="nw">Corrida 2</th><td>Después del crecimiento: confirma que los seudónimos se conservan; mide el 75 %.</td></tr>
-    <tr><th class="nw">Corrida 3</th><td>Final, antes de las 19:00: mide el 100 %; cuenta para el 70 %.</td></tr>
+    <tr><th class="nw">15:00</th><td>Llega el ticket "Kipu Pay compró Págalo".</td></tr>
+    <tr><th class="nw">15:45:29</th><td>Nuestro vigilante detecta el crecimiento: 10.856 registros, 2 canales nuevos, nada eliminado.</td></tr>
+    <tr><th class="nw">Ensayo</th><td>Antes de gastar una corrida, corrimos sobre una réplica exacta del estado publicado. Aparecieron 12 clientes migrados duplicados con un id nuevo y la cédula cruda de un PQR sin cliente.</td></tr>
+    <tr><th class="nw">Corrección</th><td>Un cliente migrado se une a su persona solo si su cédula coincide con exactamente un cliente; se cubren los documentos de PQR huérfanos.</td></tr>
+    <tr><th class="nw">Resultado</th><td>202 de 202 personas publicadas conservan su seudónimo, los 12 clientes migrados quedan unidos a su persona, el validador pasa y no hay fugas. Las instantáneas de <code>state.json</code> guardan el antes y el después.</td></tr>
   </tbody>
 </table></div>
 </section>
 
-<section class="sec" id="riesgos">
-<div class="sec-head"><h2><span class="n">7</span> Riesgos y siguiente paso</h2><a class="path" href="#riesgos">/diseno/#riesgos</a></div>
+<section class="sec" id="fallas">
+<div class="sec-head"><h2><span class="n">5</span> Fallas y recuperación</h2><a class="path" href="#fallas">/diseno/#fallas</a></div>
+<div class="tbl stack-sm"><table class="w-md">
+  <thead><tr><th>Falla</th><th>Qué pasa</th></tr></thead>
+  <tbody>
+    <tr><th>Se cae el servidor HTTP</th><td data-label="Qué pasa"><code>run.sh</code> lo reinicia en 1 s; la corrida sigue en su propio proceso y el servidor nuevo la adopta.</td></tr>
+    <tr><th>Se reinicia el contenedor</th><td data-label="Qué pasa">Railway lo reinicia si termina con error (hasta 5 veces). La corrida muere con el contenedor y, al arrancar, el servicio la relanza con el mismo <code>job_id</code> (o la marca <code>failed</code> si pasaron 115 min o se agotaron los relanzamientos).</td></tr>
+    <tr><th>Muere el proceso de la corrida</th><td data-label="Qué pasa">Se relanza hasta 2 veces, desde cero y con el mismo <code>job_id</code>.</td></tr>
+    <tr><th>La corrida se alarga</th><td data-label="Qué pasa">A los 115 min se corta y queda <code>failed</code> con su error, antes del límite de 2 h.</td></tr>
+    <tr><th>El API de fuentes responde 429 o 5xx</th><td data-label="Qué pasa">Hasta 6 reintentos con espera exponencial que respetan <code>Retry-After</code> (máximo 90 s); ante 429 se pausan todas las descargas.</td></tr>
+    <tr><th>Las fuentes crecen durante la descarga</th><td data-label="Qué pasa">El re-chequeo de <code>record_index</code> lo detecta y se descarga de nuevo.</td></tr>
+    <tr><th>Corrida a medias</th><td data-label="Qué pasa">Nunca se publica: <code>CURRENT</code> solo cambia con los 4 archivos completos; si falta uno o <code>entities.json</code> está mal formado, la corrida queda <code>failed</code>.</td></tr>
+    <tr><th>/anonymize lento o fuera de esquema</th><td data-label="Qué pasa">504 a los 55 s; 422 si un registro no cumple el esquema.</td></tr>
+    <tr><th>Se pierde el volumen</th><td data-label="Qué pasa">Riesgo abierto: el mapa de seudónimos y sus instantáneas viven en el mismo volumen.</td></tr>
+    <tr><th>Redespliegue durante una corrida</th><td data-label="Qué pasa">Regla operativa: nunca redesplegar mientras corre una evaluación. El servicio deja de responder unos segundos (según el enunciado, eso puede anular la corrida) y la corrida vuelve a empezar, gastando un relanzamiento y parte de las 2 h.</td></tr>
+  </tbody>
+</table></div>
+</section>
+
+<section class="sec" id="resultados">
+<div class="sec-head"><h2><span class="n">6</span> Resultados medidos</h2><a class="path" href="#resultados">/diseno/#resultados</a></div>
+<p>Medimos con lo que trae el material antes de gastar una corrida: <code>check_local</code> corre el pipeline, el validador oficial y los tests sobre la muestra o el corpus real.</p>
+<div class="tbl stack-sm"><table class="w-lg metrics">
+  <thead><tr><th>Dimensión</th><th>Métrica</th><th>Meta</th><th>Medido</th></tr></thead>
+  <tbody>
+    <tr><th rowspan="3" class="grp-h">Forma</th><td>Validador oficial</td><td class="num" data-label="Meta">pasa</td><td data-label="Medido">Pasa en el corpus real y en la muestra</td></tr>
+    <tr><td>Tests públicos</td><td class="num" data-label="Meta">5/5</td><td data-label="Medido">5/5</td></tr>
+    <tr><td>Tests de la muestra</td><td class="num" data-label="Meta">13/13</td><td data-label="Medido">12/13: el que falla también falla con la salida ideal (el runner local solo acepta el nombre completo)</td></tr>
+  </tbody>
+  <tbody>
+    <tr><th rowspan="3" class="grp-h">Fuga y consistencia</th><td>Valores retirados por la autoverificación</td><td class="num" data-label="Meta">0</td><td data-label="Medido">0 en ambos corpus</td></tr>
+    <tr><td>Personas publicadas que conservan su seudónimo tras el crecimiento</td><td class="num" data-label="Meta">100 %</td><td data-label="Medido">202/202</td></tr>
+    <tr><td>Clientes migrados unidos a su persona</td><td class="num" data-label="Meta">todos</td><td data-label="Medido">12/12</td></tr>
+  </tbody>
+  <tbody>
+    <tr><th rowspan="4" class="grp-h">Costo y tiempo</th><td>Tokens de LLM por corrida</td><td class="num" data-label="Meta">0</td><td data-label="Medido">0</td></tr>
+    <tr><td>Corrida completa</td><td class="num" data-label="Meta">&lt; 2 h</td><td data-label="Medido">~36 s en local antes del crecimiento y ~60 s después; ~8 min en Railway en la corrida 1, con una versión anterior y más lenta</td></tr>
+    <tr><td>/anonymize por lote</td><td class="num" data-label="Meta">&lt; 60 s</td><td data-label="Medido">Tope de 55 s por lote (si no termina, 504); latencia sin medir</td></tr>
+    <tr><td>Tamaño de <code>state.json</code></td><td class="num" data-label="Meta">&lt; 2 MB</td><td data-label="Medido">276 KB tras la corrida 1; ~0,6 MB tras el crecimiento</td></tr>
+  </tbody>
+  <tbody>
+    <tr><th rowspan="3" class="grp-h">Corridas oficiales</th><td>Corrida 1 (14:59, antes del crecimiento)</td><td class="num" data-label="Meta">—</td><td data-label="Medido">62/95 tests</td></tr>
+    <tr><td>Corrida 2 (17:33)</td><td class="num" data-label="Meta">—</td><td data-label="Medido">111/156 tests</td></tr>
+    <tr><td>Corrida 3 (17:58, 100 % del set)</td><td class="num" data-label="Meta">—</td><td data-label="Medido">161/205 tests (78,5 %): fáciles 91/94, regulares 45/68, difíciles 25/43</td></tr>
+  </tbody>
+</table></div>
+</section>
+
+<section class="sec" id="seguridad">
+<div class="sec-head"><h2><span class="n">7</span> Seguridad</h2><a class="path" href="#seguridad">/diseno/#seguridad</a></div>
+<div class="tbl stack-sm"><table class="kv">
+  <tbody>
+    <tr><th>Autenticación</th><td>Ninguna, porque el contrato del reto pide un servicio sin autenticación; un header <code>Authorization</code> se acepta y se ignora.</td></tr>
+    <tr><th>entities.json</th><td>Contiene las formas reales y es solo para el jurado: se sirve sin autenticación (en <code>/v1/entities</code> y <code>/v1/output/entities.json</code>) porque el contrato lo exige, y no forma parte del dataset para el comprador. En un despliegue real iría detrás de autenticación o no se expondría.</td></tr>
+    <tr><th>Secreto</th><td><code>ANON_SECRET</code>: en producción viene del entorno; el valor por defecto del código es solo para desarrollo. Se fija una vez y no se cambia: si cambiara, los seudónimos ya guardados en <code>state.json</code> se conservan, pero las personas nuevas (o todas, si se pierde el estado) recibirían valores distintos.</td></tr>
+    <tr><th>Token de fuentes</th><td>Llega en <code>POST /run</code>, se guarda con permiso 600 solo para poder relanzar y se borra al terminar la corrida.</td></tr>
+    <tr><th>Datos reales en el volumen</th><td><code>state.json</code> es la llave de re-identificación: relaciona los valores reales con sus seudónimos. Él, sus instantáneas en <code>history/</code> y las copias crudas de las fuentes en <code>raw/</code> viven solo en el volumen privado de Railway; la API nunca los sirve.</td></tr>
+    <tr><th>Repositorio</th><td><code>.env</code> y los datos del reto están en <code>.gitignore</code>: nunca se versionan.</td></tr>
+  </tbody>
+</table></div>
+</section>
+
+<section class="sec" id="siguiente">
+<div class="sec-head"><h2><span class="n">8</span> Riesgos y siguiente paso</h2><a class="path" href="#siguiente">/diseno/#siguiente</a></div>
 <ul class="dash">
-  <li><b>Generalizar de más</b> baja el parecido con la salida ideal; se mide contra la muestra.</li>
-  <li><b>Una forma original que se escapa</b> queda en <code>report.json</code> y no se declara en <code>entities.json</code>: el validador no rechaza la salida completa, a cambio de puntos de honestidad del diccionario.</li>
+  <li><b>Menciones ambiguas.</b> El desempate es reproducible, aunque puede no ser el que elegiría una persona.</li>
+  <li><b>Tests ocultos con mecanismos nuevos.</b> Las reglas cubren lo que conocemos; lo nuevo depende del fail-closed; la autoverificación repara lo que se escapa y deja en <code>report.json</code> lo que no pudo reparar.</li>
+  <li><b>Limitaciones conocidas.</b> Las fechas de nacimiento escritas en palabras todavía no se reemplazan (la corrección está lista, sin desplegar); los cuasi-identificadores de los empleados (cargo, ciudad y año de ingreso) no se generalizan; los 11 nombres de pila sueltos que comparten dos o más personas quedan como están.</li>
+  <li><b>Un solo volumen y una sola réplica.</b> Perder el volumen sin respaldo rompería la continuidad de los seudónimos.</li>
 </ul>
-<h3>Siguiente paso</h3>
+<h3>Siguiente paso (no construido)</h3>
 <ul class="dash">
-  <li><b>Rama de IA</b> para el residuo ambiguo: modelo pequeño con salida JSON, caché y respaldo fail-closed; lo que decida se promueve a reglas (datos).</li>
-  <li><b>Formatos para el comprador</b> (aún no construido), generados desde la salida ya anonimizada:</li>
+  <li><b>Rama de IA</b> solo para el residuo ambiguo: modelo pequeño con salida JSON, caché y fail-closed; lo que decida se promueve a reglas (datos).</li>
+  <li><b>Conteo de k-anonimato</b> sobre combinaciones de cuasi-identificadores, en lugar de generalizar siempre.</li>
+  <li><b>Cifrado en reposo del estado (KMS) y retención:</b> borrar crudos y snapshots viejos tras cada corrida exitosa.</li>
+  <li><b>Formatos para el comprador</b>, generados solo desde la salida anonimizada y nunca con <code>entities.json</code>:</li>
 </ul>
 <div class="tbl stack-sm"><table class="w-md">
   <thead><tr><th>Uso</th><th>Formato</th><th>Se genera desde</th></tr></thead>
@@ -307,12 +285,18 @@
     <tr><th>Preentrenamiento</th><td data-label="Formato">Corpus <code>.txt</code></td><td data-label="Se genera desde">Los tres JSONL</td></tr>
   </tbody>
 </table></div>
-<p class="note">Siempre desde la salida anonimizada, nunca desde los datos crudos, y nunca con <code>entities.json</code>. XML no es un formato de entrenamiento.</p>
+<h3>Cómo escala</h3>
+<ul class="dash">
+  <li><b>Hoy basta un archivo:</b> un solo escritor por corrida, <code>state.json</code> de ~0,6 MB medido, sin consultas, escritura atómica y fácil de comparar antes y después.</li>
+  <li><b>Migrar cuando</b> haya varias réplicas o inquilinos escribiendo a la vez, millones de registros, consultas sobre los datos o requisitos de auditoría y retención.</li>
+  <li><b>Destino:</b> PostgreSQL para el registro (<code>personas</code>, <code>identificadores</code>, <code>seudonimos</code> con <code>UNIQUE(tipo, valor)</code>, <code>corridas</code>, <code>auditoria</code>) con un lock por corrida, almacenamiento de objetos (S3 o R2) para las salidas y una cola de trabajos con workers.</li>
+  <li><b>Sin cambiar seudónimos:</b> mismos contratos y mismo HMAC, así la migración no altera ningún seudónimo publicado.</li>
+</ul>
 </section>
 </main>
 
 <footer class="foot">
-  <div class="wrap">Ulises Fabian Gutierrez Tame · Reto 1 · Frontier Hackathon CDMX · 31 oct 2026 · <a href="/arquitectura/">Arquitectura</a></div>
+  <div class="wrap">Ulises Fabian Gutierrez Tame · Reto 1 · Frontier Hackathon CDMX · 31 oct 2026 · <a href="/arquitectura/">Arquitectura</a> · <a href="https://github.com/ulisestame/frontier-hackaton-cdmx">Repositorio</a></div>
 </footer>
 </body>
 </html>

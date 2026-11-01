@@ -19,7 +19,10 @@ Todo dato que identifica a una persona natural, dondequiera que aparezca: column
 | Celulares | Mismo formato (+57, espacios, guiones), prefijo móvil válido y lejos del original. |
 | Direcciones | Misma forma (calle, carrera, diagonal; completa o abreviada; apartamento, oficina, casa), con números distintos. |
 | Fechas de nacimiento | Se corren entre 200 y 1.500 días y conservan su formato: ISO, día/mes/año, mes/día/año en los documentos en inglés, "d de mes de año". |
-| Placas, pasaportes, cuentas y tarjetas | Mismo formato. Las tarjetas siguen siendo válidas por Luhn. |
+| Placas y pasaportes | Mismo formato. |
+| Cuentas bancarias, tarjetas y pólizas, tras una palabra clave (cuenta, ahorros, corriente, tarjeta, débito, crédito, póliza) | Mismo agrupamiento de dígitos; las tarjetas quedan válidas por Luhn. |
+| Direcciones IPv4 | Otra dirección IPv4, siempre la misma para la misma IP. |
+| "Inicial + apellido" ("A. Apellido") | La inicial y el apellido del seudónimo, cuando exactamente una persona conocida tiene esa inicial y ese primer apellido. |
 | Usuarios y handles: menciones `@usuario`, agente de un PQR | Un handle con el patrón del original. |
 
 Ningún seudónimo puede coincidir con un valor real de otra persona. Todos los valores reales del registro se reservan antes de generar, también entre tipos de dígitos (cédula, celular, cuenta), porque el jurado compara cadenas de dígitos sin importar su tipo.
@@ -52,11 +55,19 @@ Ningún seudónimo puede coincidir con un valor real de otra persona. Todos los 
 - **Tiempo, en producción**: la corrida 1, con la versión de la PR #7, tardó unos 8 minutos en Railway. Desde la PR #9 el pipeline es unas 10 veces más rápido en local.
 - **Infraestructura**: un contenedor siempre encendido en Railway y un volumen persistente para el estado. Ningún otro servicio.
 
+## Resultados de las corridas oficiales
+
+- **Corrida 1** (14:59, antes del crecimiento de las fuentes): 62/95 tests.
+- **Corrida 2** (17:33): 111/156 tests.
+- **Corrida 3** (17:58, 100 % del set): 161/205 tests (78,5 %): fáciles 91/94, regulares 45/68, difíciles 25/43.
+
 ## Decisiones de diseño
 
 - **Reglas primero.** Un modelo de lenguaje quedaría solo para el residuo ambiguo, con caché y fail-closed. En esta versión no hizo falta: las reglas pasan el validador y los tests públicos sin gastar tokens. Descartado: todo con un modelo (costo, resultados no deterministas y riesgo de reescribir el texto en vez de reemplazar).
 - **Determinismo.** HMAC(secreto, persona) más el mapa persistido: la misma persona conserva su seudónimo entre fuentes, corridas y procesos, y una persona nueva recibe uno nuevo y único. Descartado: valores aleatorios o marcadores como `[NOMBRE]`, que rompen la consistencia y la utilidad.
-- **Fusión solo con coincidencia exacta.** Dos registros son la misma persona solo por un identificador duro, nunca por la ciudad o el cargo. Un cliente migrado se une a uno existente solo si su cédula coincide con exactamente uno; ante cualquier ambigüedad, no se fusiona.
+- **Fusión solo con coincidencia exacta.** Dos registros son la misma persona por un identificador duro (cédula, correo) o por un nombre completo exacto que coincide con una sola persona; nunca por la ciudad o el cargo. Ante homónimos decide la evidencia del hilo y, si no la hay, no se fusiona. Un cliente migrado se une a uno existente solo si su cédula coincide con exactamente uno.
+- **Vinculación.** Cada mención va a una persona por autor, dueño del registro, participantes del hilo y evidencia dura (correo, cédula, celular, llave, fecha + monto de una transacción); en documentos decide primero la línea de la mención. Entre un cliente y un empleado con el mismo nombre corto decide el contexto. Al vincular usuarios de chat se filtra por tipo, se descartan candidatos que ya son otro usuario y se usa evidencia dura contra la fila maestra (últimos 4 dígitos de cédula o celular, dirección, fecha de nacimiento larga).
+- **Autoverificación con reparación.** Cada forma real que aparece en la salida se reemplaza por el seudónimo de esa persona y la salida se vuelve a verificar. Lo que aún quede no se declara y va a `report.json`, porque el validador rechazaría la salida completa. Descartado: declararlo igual, o solo registrarlo.
 - **Fail-closed.** Lo que no se puede clasificar se trata como sensible, porque la fuga pesa 45 de 100 puntos. Se reemplaza, nunca se reescribe el texto.
 - **El pipeline corre aparte y el estado vive en disco.** La API responde aun si una corrida se cae, y las salidas se publican de golpe, nunca a medias.
 
@@ -71,8 +82,9 @@ Ningún seudónimo puede coincidir con un valor real de otra persona. Todos los 
 - **`entities.json` se sirve sin autenticación** (`GET /v1/entities` y `GET /v1/output/entities.json`) porque el contrato del reto lo exige. Contiene las formas originales y es solo para el jurado: nunca viaja con el dataset. En un despliegue real iría detrás de autenticación o no se expondría.
 - **Casos ambiguos de nombres.** A veces una mención puede ser de varias personas y el registro no lo decide. Se resuelve con desempates deterministas: el contexto del registro y del hilo, los identificadores duros y luego reglas fijas.
   - El resultado es reproducible, aunque puede no ser el que elegiría una persona.
-  - Un nombre de pila suelto que nada decide puede quedar como está, porque no identifica por sí solo.
-  - En el corpus real, la calificación local reporta 18 casos ambiguos.
+  - Un nombre de pila suelto que solo una persona lleva recibe su seudónimo. Los 11 nombres de pila sueltos que comparten dos o más personas quedan como están, porque no identifican por sí solos.
+- **Fechas de nacimiento escritas en palabras.** Todavía no se reemplazan; la corrección está lista, sin desplegar.
+- **Cuasi-identificadores de empleados.** El cargo, la ciudad y el año de ingreso de los empleados no se generalizan.
 - **Un solo volumen y una sola réplica.** Perder el volumen sin respaldo rompería la continuidad de los seudónimos. El secreto los hace deterministas, pero el mapa persistido resuelve colisiones y unicidad.
 - **Siguiente paso:**
   - un modelo de lenguaje solo para el residuo ambiguo, con caché y fail-closed;
