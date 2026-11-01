@@ -68,6 +68,18 @@ SPELLED_EMAIL_RX = re.compile(
 PHONE_RX = re.compile(r"(?<![\d+])(?:\+?57[\s.-]?)?\(?3\d{2}\)?[\s.-]?\d{3}[\s.-]?\d{2}[\s.-]?\d{2}(?!\d)")
 NUMBER_RX = re.compile(r"(?<![\d.,])(\d{1,3}(?:[.\s]\d{3}){1,3}|\d{6,10})(?![\d]|[.,]\d)")
 ID_CUE = re.compile(r"(?i)(?:\bc\.?\s?c\.?|c[ée]dula|documento|identificaci[oó]n|\bc\.?e\.?\b|\bnit\b|\bt\.?i\.?\b|\bid\b|n[uú]mero de identificaci[oó]n)[\s:#.,n°ºo]*(?:es\s+|del\s+titular\s+|:)?\s*$")
+# Bank accounts, card numbers and insurance policies after a cue ("cuenta de ahorros 0123 4567 890",
+# "tarjeta 4111-...", "póliza Sura 5512345"). Accounts and cards need 9+ digits, policies 6+, so
+# last-4 mentions ("terminada en 7777"), obligation numbers (####-####) and keys such as
+# PQR-2099-0001 or PSE-11112222 stay as they are.
+ACCOUNT_RX = re.compile(
+    r"(?i)(?P<cue>\bcuenta|\bcta\.?|\bahorros|\bcorriente|\btarjeta|\btc\b|\bd[ée]bito|\bcr[ée]dito|\baccount"
+    r"|\bcard|\bp[óo]liza|\bpolicy)"
+    r"(?:[^\d\n.;]|\.(?!\s)){0,40}?"  # "cuenta de Bancolombia? Es la ...": a short bridge, same sentence
+    r"[:#]?\s*(\d(?:[ .-]?\d){5,18})(?![\d])(?!\s*(?:pesos|cop|mil|millones)\b)")
+OBLIGATION_RX = re.compile(r"\d{4}-\d{4}")
+INITIAL_SURNAME_RX = re.compile(r"(?<![\w.])([A-ZÁÉÍÓÚÑ])\.\s?([A-ZÁÉÍÓÚÑ][a-záéíóúñü]{2,})(?!\w)")
+IPV4_RX = re.compile(r"(?<![\d.])((?:25[0-5]|2[0-4]\d|1?\d?\d)(?:\.(?:25[0-5]|2[0-4]\d|1?\d?\d)){3})(?![\d]|\.\d)")
 PLATE_RX = re.compile(r"(?<![A-Za-z0-9])([A-Z]{3})([- ]?)(\d{3}|\d{2}[A-Z])(?![A-Za-z0-9])")
 PLATE_STOP = {"USD", "COP", "EUR", "MXN", "PQR", "INC", "CEO", "CTO", "CFO", "COO", "SOAT", "API", "PDF", "IVA", "GMF"}
 PASSPORT_RX = re.compile(r"(?i)(?:pasaporte|passport)(?:\s+(?:n[°ºo.]*|number|no\.?|is|es|n[uú]mero))*\s*[:#]?\s*([A-Z]{1,3}\d{6,8})\b")
@@ -79,6 +91,21 @@ ADDRESS_RX = re.compile(
 ISO_DATE_RX = re.compile(r"(?<!\d)((?:19|20)\d{2})-(\d{2})-(\d{2})(?!\d)")
 SLASH_DATE_RX = re.compile(r"(?<!\d)(\d{2})/(\d{2})/((?:19|20)\d{2})(?!\d)")
 MENTION_RX = re.compile(r"<@([A-Z0-9]+)(?:\|[^>]*)?>")
+BIRTH_LONG_RX = re.compile(
+    r"(?i)(?<!\d)(\d{1,2})\s+de\s+(enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|setiembre|octubre|"
+    r"noviembre|diciembre)\s+(?:de|del)\s+((?:19|20)\d{2})(?!\d)"
+)
+_MONTH_NUM = {m: i + 1 for i, m in enumerate(("enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto",
+                                               "septiembre", "octubre", "noviembre", "diciembre"))}
+_MONTH_NUM["setiembre"] = 9
+ADDR_KEY_RX = re.compile(
+    r"(?<![a-z])(calle|cl|carrera|cra|cr|kr|kra|diagonal|dg|transversal|tv|trans|avenida|av|ak|ac|autopista|circular|cq)"
+    r"\.?\s+(\d{1,3}\s?[a-z]?(?:\s+bis)?(?:\s+[a-z](?![a-z0-9]))?(?:\s+(?:sur|norte|este|oeste))?)\s*(?:#|no\.?|n°)\s*"
+    r"(\d{1,3}\s?[a-z]?)\s*-\s*(\d{1,3})"
+)
+_ADDR_TYPE = {"calle": "cl", "carrera": "kr", "cra": "kr", "cr": "kr", "kra": "kr", "diagonal": "dg",
+              "transversal": "tv", "trans": "tv", "avenida": "av", "circular": "cq"}
+LAST4_RX = re.compile(r"(?<![\d.,/-])(\d{4})(?![\d/-]|[.,]\d)")
 TABLE_KEY_RX = re.compile(r"\b(CL-\d{4,6}|PG-\d{4,6}|TX-\d{4,7}|PQR-\d{4}-\d{3,5}|KP-\d{3})\b")
 # Ties between people of different kinds (a customer and an employee who share a short name):
 # a role next to the mention, or the corporate mailbox, points to the colleague; a customer
@@ -198,6 +225,39 @@ def canon(kind: str, value: str) -> str:
     return v
 
 
+def address_key(text: str) -> str:
+    """Street type and numbers of the first address in a text, whatever the spelling:
+    "Cra 7 #12-30" and "carrera 7 # 12 - 30 apto 201" give the same key."""
+    m = ADDR_KEY_RX.search(strip_accents(text).lower().replace("nº", "no").replace("n°", "no"))
+    if not m:
+        return ""
+    street = _ADDR_TYPE.get(m.group(1), m.group(1))
+    first, second = re.sub(r"\s+", "", m.group(2)), re.sub(r"\s+", "", m.group(3))
+    return f"{street}{first}#{second}-{m.group(4)}"
+
+
+def dates_in(text: str) -> set[str]:
+    """ISO form of every full date a text writes: 1990-04-11, 11/04/1990 (either order) or
+    "11 de abril de 1990"."""
+    out = set()
+    for m in ISO_DATE_RX.finditer(text):
+        out.add(m.group())
+    for m in SLASH_DATE_RX.finditer(text):
+        a, b, y = m.groups()
+        out.update(f"{y}-{mm}-{dd}" for dd, mm in ((a, b), (b, a)))
+    for m in BIRTH_LONG_RX.finditer(text):
+        out.add(f"{m.group(3)}-{_MONTH_NUM[m.group(2).lower()]:02d}-{int(m.group(1)):02d}")
+    return {d for d in out if _valid_iso(d)}
+
+
+def spelled_email(local: str, domain: str) -> str:
+    """'ana punto ruiz' + 'correo punto com' -> 'ana.ruiz@correo.com'."""
+    local = re.sub(r"(?i)\s+punto\s+", ".", local)
+    local = re.sub(r"(?i)\s+gui[oó]n bajo\s+", "_", local)
+    local = re.sub(r"(?i)\s+(?:guion|raya)\s+", "-", local)
+    return f"{local}@{re.sub(r'(?i)\s+punto\s+', '.', domain)}".lower()
+
+
 @dataclass
 class Ctx:
     record_id: str
@@ -209,11 +269,15 @@ class Ctx:
     # identifier: computed on the first given-name-only mention that needs it.
     record_text: str = ""
     named: set[str] | None = None
+    # Documents: a hard identifier on the mention's own line (a radicado, a CL- key, a
+    # transaction's date and amount) decides between homonyms before the document-wide context.
+    lines: bool = False
 
 
 class Engine:
     def __init__(self, factory: "fakes.PseudonymFactory"):
         self.f = factory
+        self.initials_left: list[tuple[str, str, int]] = []  # (record, "A. Apellido", candidates)
         self.persons: dict[str, Person] = {}
         self.alias: dict[str, str] = {}
         self.name_index: dict[str, list[tuple[tuple[str, ...], int, int, str]]] = {}
@@ -230,6 +294,7 @@ class Engine:
         self.published: set[str] = set()
         # (ISO date, amount) of each transaction -> its customers: a tie-breaker for homonyms
         self.tx_index: dict[tuple[str, str], set[str]] = {}
+        self._addr_index: dict[str, set[str]] | None = None  # address_key -> persons, built on first use
 
     # ------------------------------------------------------------ registry --
     def resolve_pid(self, pid: str | None) -> str | None:
@@ -281,6 +346,8 @@ class Engine:
             return
         self.person(pid).add_id(kind, c)
         self.id_index.setdefault((kind, c), set()).add(self.resolve_pid(pid))
+        if kind == "address" and self._addr_index is not None and (key := address_key(c)):
+            self._addr_index.setdefault(key, set()).add(self.resolve_pid(pid))
 
     def merge(self, src: str, dst: str) -> None:
         """Make src an alias of dst (same real person)."""
@@ -359,6 +426,12 @@ class Engine:
             return None
         if len(pids) == 1:
             return next(iter(pids))
+        if ctx.lines and text:
+            line = self._mention_line(pids, ctx, text)
+            if line:
+                ev = (self.evidence(line) | self.tx_evidence(line)) & pids
+                if len(ev) == 1:
+                    return next(iter(ev))
         for scope in ([ctx.author], [ctx.owner], ctx.near):
             hit = pids & {self.resolve_pid(x) for x in scope if x}
             if len(hit) == 1:
@@ -476,6 +549,22 @@ class Engine:
                 out |= self.tx_index.get((d, a), set())
         return {self.resolve_pid(p) for p in out}
 
+    def _mention_line(self, pids: set[str], ctx: Ctx, text: str) -> str:
+        """The line of the mention a document's pick call is about. Like _tie_line, the n-th call
+        for these candidates in this text is their n-th shared mention, with a counter of its own."""
+        seq = vars(ctx).setdefault("_line_seq", {})
+        key = (hash(text), frozenset(pids))
+        if key not in seq:
+            seq[key] = [self._tie_offsets(pids, text), 0]
+        offsets, n = seq[key]
+        if not offsets:
+            return ""
+        seq[key][1] = n + 1
+        pos = offsets[n % len(offsets)]
+        start = text.rfind("\n", 0, pos) + 1
+        end = text.find("\n", pos)
+        return text[start:len(text) if end < 0 else end]
+
     def _tie_line(self, pids: set[str], ctx: Ctx, text: str) -> tuple[str, str]:
         """(line, column header) of the mention a tie call is about. find_names asks left to
         right, so the n-th call for these candidates in this text is their n-th shared mention
@@ -540,6 +629,47 @@ class Engine:
         for m in TABLE_KEY_RX.finditer(text):
             out |= self.id_index.get(("key", m.group()), set())
         return {self.resolve_pid(p) for p in out}
+
+    def addresses(self) -> dict[str, set[str]]:
+        """address_key -> persons with that address (registry rows and addresses seen in text)."""
+        if self._addr_index is None:
+            self._addr_index = {}
+            for (kind, value), pids in self.id_index.items():
+                if kind == "address" and pids and (key := address_key(value)):
+                    self._addr_index.setdefault(key, set()).update(pids)
+        return self._addr_index
+
+    def evidence_among(self, text: str, cands: set[str]) -> set[str]:
+        """Clues read only to tell a chat user's homonyms apart (never in record processing): an
+        e-mail spelled with "punto" and "arroba", a full date equal to a birth date, an address
+        in any spelling, a transaction's date and amount, the last four digits of a cédula or
+        phone ("termina en 4821"), or the full name with both surnames (an attachment like
+        "extracto_ana_ruiz_mora.pdf")."""
+        cands = {self.resolve_pid(c) for c in cands}
+        found: set[str] = set()
+        for m in SPELLED_EMAIL_RX.finditer(text):
+            found |= self.id_index.get(("email", spelled_email(m.group(1), m.group(2))), set())
+        for d in dates_in(text):
+            found |= self.id_index.get(("birth", d), set())
+        if "#" in text or "-" in text:
+            addresses = self.addresses()
+            for m in ADDRESS_RX.finditer(text):
+                found |= addresses.get(address_key(m.group()), set())
+        out = ({self.resolve_pid(p) for p in found} | self.tx_evidence(text)) & cands
+        undated = text  # the year of a date ("de 1998", "desde 1998") is not a tail
+        for rx in (ISO_DATE_RX, SLASH_DATE_RX, BIRTH_LONG_RX, YEAR_CTX_RX):
+            undated = rx.sub(" ", undated)
+        tails = {m.group(1) for m in LAST4_RX.finditer(undated)}
+        flat = " " + " ".join(ntoks(text.replace("_", " "))) + " "
+        for pid in cands:
+            p = self.persons.get(pid)
+            if p is None:
+                continue
+            if tails and any(v[-4:] in tails for k in ("cedula", "phone") for v in p.ids.get(k, ()) if len(v) > 4):
+                out.add(pid)
+            if len(p.given) + len(p.surnames) >= 3 and f" {' '.join(ntoks(p.full))} " in flat:
+                out.add(pid)
+        return out
 
     def owner_for_unknown(self, ctx: Ctx, kind: str, value: str) -> Person:
         if ctx.owner and self.resolve_pid(ctx.owner) in self.persons:
@@ -623,6 +753,30 @@ class Engine:
                 self.index_id(p.pid, kind, d)
             val = self.pseudo(kind, p, d)
             add(m.start(1), m.end(1), fakes.format_like(surf, val), kind, p, surf, kind, val)
+        # bank accounts / card numbers / insurance policies (cue + digits, any grouping)
+        for m in ACCOUNT_RX.finditer(text):
+            surf = m.group(2)
+            d = only_digits(surf)
+            policy = re.search(r"(?i)p[óo]liza|policy", m.group(0)[: m.start(2) - m.start()]) is not None
+            if len(d) < (6 if policy else 9) or OBLIGATION_RX.fullmatch(surf):
+                continue
+            if text[max(0, m.start(2) - 1):m.start(2)] == "-" or TABLE_KEY_RX.search(
+                    text[max(0, m.start(2) - 6):m.end(2) + 1]):
+                continue  # the tail of a key such as PQR-2099-0001 or PSE-11112222
+            if (len(d) == 10 and d.startswith("3")) or self.id_index.get(("cedula", d)):
+                continue  # a phone or a known cédula: handled by their own detectors
+            pids = self.id_index.get(("account", d), set())
+            p = self.person(self.pick(pids, ctx, text)) if pids else self.owner_for_unknown(ctx, "account", d)
+            if not pids:
+                self.index_id(p.pid, "account", d)
+            val = self.pseudo("account", p, d)
+            add(m.start(2), m.end(2), fakes.format_like(surf, val), "account", p, surf, "account", val)
+        # IPv4 addresses
+        for m in IPV4_RX.finditer(text):
+            ip = m.group(1)
+            p = self.owner_for_unknown(ctx, "ip", ip)
+            fake = self.f.ip(ip)
+            add(m.start(1), m.end(1), fake, "ip", p, ip, "ip", fake)
         # plates
         for m in PLATE_RX.finditer(text):
             if m.group(1) in PLATE_STOP:
@@ -690,7 +844,38 @@ class Engine:
             add(m.start(), m.end(), val, "handle", p, m.group(), "handle", val)
         # names
         spans.extend(self.find_names(text, ctx))
+        spans.extend(self.find_initials(text, ctx))
         return self._resolve_overlaps(spans)
+
+    def find_initials(self, text: str, ctx: Ctx):
+        """'A. Apellido': rendered as the pseudonym's initial and surname when exactly one known
+        person has that initial and that first surname. Otherwise the text is left alone and the
+        case is listed in ``initials_left``."""
+        spans = []
+        for m in INITIAL_SURNAME_RX.finditer(text):
+            ini, sur = norm(m.group(1)), norm(m.group(2))
+            if sur in fakes.NON_NAME_WORDS:
+                continue
+            cands = set()
+            for pid, p in self.persons.items():
+                if p.surnames and p.given and norm(p.surnames[0]) == sur and norm(p.given[0])[:1] == ini:
+                    cands.add(self.resolve_pid(pid))
+            cands.discard(None)
+            if len(cands) != 1:
+                self.initials_left.append((ctx.record_id, m.group(0), len(cands)))
+                continue
+            p = self.persons[next(iter(cands))]
+            pn = self.pname(p)
+            start, end, ns = m.start(), m.end(), 1
+            nxt = re.match(r"\s+([A-ZÁÉÍÓÚÑ][a-záéíóúñü]+)", text[end:])
+            if nxt and len(p.surnames) > 1 and norm(nxt.group(1)) == norm(p.surnames[1]):
+                end, ns = end + nxt.end(), 2  # "A. Apellido Segundo"
+            sep = ". " if re.search(r"\.\s", m.group(0)) else "."
+            repl = f"{pn['given'][0][0]}{sep}{' '.join(pn['surnames'][:ns])}"
+            surf = text[start:end]
+            spans.append((start, end, repl, "name", p.pid, surf))
+            self.note(p, ctx.record_id, surf, "name", repl)
+        return spans
 
     def _resolve_overlaps(self, spans):
         spans.sort(key=lambda s: (s[0], -(s[1] - s[0])))
@@ -723,10 +908,18 @@ class Engine:
                 surf = text[start:end]
                 weak = ns == 0
                 if weak:
+                    # A given name that opens an unknown full name ("<given> <unknown surname>") is
+                    # that unknown person: giving the given name to a known carrier would leave the
+                    # surname in the clear.
+                    span = self._unknown_name(text, toks, i, ctx)
+                    if span:
+                        spans.append(span[:6])
+                        i += span[6]
+                        continue
                     pid = self._weak_pick(pids, ctx, text, start, surf)
                 else:
                     pid = self.pick(pids, ctx, text)
-                if pid and not self._is_kept_at(text, start, end):
+                if pid and not self._is_kept_at(text, start, end, self._anchored(pid, ctx)):
                     p = self.persons[pid]
                     repl = self.render_name(p, ng, ns, surf, text, start, end)
                     spans.append((start, end, repl, "name", p.pid, surf))
@@ -741,6 +934,16 @@ class Engine:
                 spans.append(span[:6])
                 i += span[6]
                 continue
+            if best and weak and pid is None:  # nothing decided and no unknown full name opens here
+                pid = self._lone_carrier(pids, ctx, text, surf)
+                if pid and not self._is_kept_at(text, start, end, self._anchored(pid, ctx)):
+                    p = self.persons[pid]
+                    repl = self.render_name(p, ng, ns, surf, text, start, end)
+                    spans.append((start, end, repl, "name", p.pid, surf))
+                    self.note(p, ctx.record_id, "", "name", repl)
+                    p.originals.add(surf)
+                    i += n
+                    continue
             i += 1
         return spans
 
@@ -798,11 +1001,30 @@ class Engine:
             return next(iter(pids))
         return None
 
-    def _is_kept_at(self, text, start, end) -> bool:
+    def _lone_carrier(self, pids, ctx, text, surf) -> str | None:
+        """A bare given name that nothing decided and that does not open an unknown full name:
+        when exactly one person carries it, it is theirs (leaving it is a sure leak). A given
+        name that is also a common word ("Abril", "Julio") still needs a cue. Several carriers:
+        left as before, no guess and no new entity."""
+        pids = {self.resolve_pid(p) for p in pids}
+        if len(pids) != 1 or (not surf[:1].isupper() and not ctx.filename) or norm(surf) in fakes.NON_NAME_WORDS:
+            return None
+        return next(iter(pids))
+
+    def _is_kept_at(self, text, start, end, anchored: bool = False) -> bool:
         window = norm(text[max(0, start - 25):min(len(text), end + 25)])
         surf = norm(text[start:end])
-        # >= : a mention that IS a kept term ("Juan Valdez") is kept too, not only a part of one
-        return any(k in window and surf in k for k in _KEPT_NORM if len(k) >= len(surf))
+        # A part of a kept term is kept. A mention that IS a kept term is kept too, unless it
+        # names a person anchored in this record (the role decides, not the name).
+        return any(k in window and surf in k for k in _KEPT_NORM
+                   if len(k) > len(surf) or (len(k) == len(surf) and not anchored))
+
+    def _anchored(self, pid: str, ctx: Ctx) -> bool:
+        """The person is this record's author, owner or a participant, or a hard identifier in
+        the record points to them."""
+        pid = self.resolve_pid(pid)
+        around = {self.resolve_pid(x) for x in [ctx.author, ctx.owner, *ctx.near] if x}
+        return pid in around or pid in self.evidence(ctx.record_text or "")
 
     def _unknown_name(self, text, toks, i, ctx):
         s0, e0, raw0, n0 = toks[i]

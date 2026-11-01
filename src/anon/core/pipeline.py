@@ -21,6 +21,7 @@ from typing import Callable
 
 from .. import fakes
 from .engine import TABLE_KEY_RX, Ctx, Engine, Person, canon, kept_lead, norm
+from .selfcheck import repair_leaks
 from .textnorm import Prepared, contains, is_bare_name, record_text
 
 SECRET = os.environ.get("ANON_SECRET", "kipu-frontier-2026-secret").encode()
@@ -183,9 +184,18 @@ def build_registry(eng: Engine, corpus) -> dict:
         real = u.get("real_name") or prof.get("real_name") or u.get("name", "")
         email = (prof.get("email") or "").strip()
         upid = f"u:{uid}"
-        cands = set(eng.id_index.get(("email", canon("email", email)), set())) if email else set()
+        # A state from an earlier run may already hold this user as a person of its own: that
+        # earlier identity is not a candidate (with it, a lone real match looked ambiguous).
+        cands = set(eng.id_index.get(("email", canon("email", email)), set())) - {upid} if email else set()
         if not cands and real:
-            cands = eng.candidates_by_name(real)
+            cands = eng.candidates_by_name(real) - {upid}
+            # A homonym on the other side of the counter is someone else: a "Cliente" profile or a
+            # personal e-mail is not an employee, and a company e-mail is not a customer.
+            staff = email.lower().endswith("@kipupay.co")
+            client = not staff and ((prof.get("title") or "").strip().lower() == "cliente" or bool(email))
+            drop = "customer" if staff else "employee" if client else None
+            if drop:
+                cands = {c for c in cands if eng.person(c).kind != drop}
         if len(cands) == 1:
             target = next(iter(cands))
             eng.alias[upid] = target
@@ -212,9 +222,10 @@ def build_registry(eng: Engine, corpus) -> dict:
     for upid, cands in ambiguous.items():
         uid = upid[2:]
         text = "\n".join(x for t in threads.values() if uid in t["users"] for x in t["text"])
+        cands = {eng.resolve_pid(c) for c in cands}
         ev = eng.evidence(text) & cands
-        if not ev:  # a date and an amount that match one homonym's transaction
-            ev = eng.tx_evidence(text) & cands
+        if not ev:  # softer clues, checked only against these homonyms
+            ev = eng.evidence_among(text, cands)
         if len(ev) == 1:
             eng.merge(upid, next(iter(ev)))
     # Users with no name match (deactivated accounts, nicknames): link them only through hard
@@ -232,6 +243,27 @@ def build_registry(eng: Engine, corpus) -> dict:
         ev = {p for p in eng.evidence("\n".join(texts)) if p != upid and eng.persons[p].kind == "customer"}
         if len(ev) == 1:
             eng.merge(upid, next(iter(ev)))
+    # Elimination: a homonym already linked to another chat user is not this one. When every
+    # candidate but one is taken, the user is that one, unless another user is left with the same
+    # one too (then neither is decided). Repeated until nothing changes.
+    taken = {eng.resolve_pid(f"u:{uid}") for uid in corpus.users}
+    changed = True
+    while changed:
+        changed = False
+        claims: dict[str, list[str]] = {}
+        for upid, cands in ambiguous.items():
+            if eng.resolve_pid(upid) != upid:
+                continue
+            real = {eng.resolve_pid(c) for c in cands} - {upid}
+            real = {c for c in real if c in eng.persons and eng.persons[c].kind in ("customer", "employee")}
+            left = real - taken
+            if len(real) >= 2 and len(left) == 1:
+                claims.setdefault(next(iter(left)), []).append(upid)
+        for target, users in claims.items():
+            if len(users) == 1:
+                eng.merge(users[0], target)
+                taken.add(target)
+                changed = True
     return threads
 
 
@@ -344,8 +376,8 @@ def process_doc(eng: Engine, d: dict) -> dict:
     whole = " ".join([d.get("filename", ""), d.get("title", ""), d.get("body", "")] +
                      [str(v) for v in d.get("metadata", {}).values()])
     near = eng.evidence(whole)
-    ctx = Ctx(record_id=d["id"], near=near, record_text=whole)
-    fctx = Ctx(record_id=d["id"], near=near, filename=True, record_text=whole)
+    ctx = Ctx(record_id=d["id"], near=near, record_text=whole, lines=True)
+    fctx = Ctx(record_id=d["id"], near=near, filename=True, record_text=whole, lines=True)
     return {
         "id": d["id"],
         "format": d["format"],
@@ -426,16 +458,20 @@ class Haystack:
         # Prepared: normalize each record and the whole output once, not on every question
         self.by_id = {r["id"]: Prepared(record_text(r)) for r in records}
         self.whole = Prepared("\n".join(p.raw for p in self.by_id.values()))
+        self._has: dict[str, bool] = {}  # the repair step and build_entities ask the same questions
 
     def has(self, needle: str) -> bool:
-        return contains(self.whole, needle)
+        if needle not in self._has:
+            self._has[needle] = contains(self.whole, needle)
+        return self._has[needle]
 
     def in_records(self, rec_ids, needle: str) -> bool:
         return any(contains(self.by_id[r], needle) for r in rec_ids if r in self.by_id)
 
 
-def build_entities(eng: Engine, records: list[dict], entity_ids: dict) -> tuple[list[dict], list[str]]:
-    hay = Haystack(records)
+def build_entities(eng: Engine, records: list[dict], entity_ids: dict,
+                   hay: Haystack | None = None) -> tuple[list[dict], list[str]]:
+    hay = hay or Haystack(records)
     leaks: list[str] = []
     ents: list[dict] = []
     kept_originals: list[str] = [t for t in eng.kept_seen if len(t) >= 4]
@@ -507,8 +543,11 @@ def anonymize_corpus(corpus, state_dir: Path, progress: Callable[[dict], None] =
     capture_chat_context(eng, corpus.chats, threads)
     progress({"stage": "chats", "done": len(chats)})
     entity_ids = dict(prev.get("entity_ids", {})) if prev else {}
-    entities, leaks = build_entities(eng, chats + docs + tables, entity_ids)
-    progress({"stage": "entities", "entities": len(entities), "leaks": len(leaks)})
+    # self-check, first the repair (replace leaked originals, re-check), then the last resort below
+    eng.repaired, hay = repair_leaks(eng, chats + docs + tables, Haystack)
+    entities, leaks = build_entities(eng, chats + docs + tables, entity_ids, hay)
+    progress({"stage": "entities", "entities": len(entities), "leaks": len(leaks),
+              "repaired": sum(eng.repaired.values())})
     return eng, entity_ids, chats, docs, tables, entities, leaks
 
 
@@ -529,7 +568,8 @@ def run_pipeline(sources_url: str, token: str, out_dir: Path, state_dir: Path,
     _write_jsonl(out_dir / "docs.jsonl", docs)
     _write_jsonl(out_dir / "tables.jsonl", tables)
     (out_dir / "entities.json").write_text(json.dumps({"entities": entities}, ensure_ascii=False, indent=1), encoding="utf-8")
-    (out_dir / "report.json").write_text(json.dumps({"leaks": leaks, "warnings": eng.warnings[:500],
+    (out_dir / "report.json").write_text(json.dumps({"leaks": leaks, "repaired": dict(getattr(eng, "repaired", {})),
+                                                     "warnings": eng.warnings[:500],
                                                      "seconds": round(time.time() - t0, 1)}, ensure_ascii=False, indent=1), encoding="utf-8")
     save_state(Path(state_dir), eng, entity_ids)
     # Keep one snapshot per run: rollback point, and the before/after evidence for the incident.
